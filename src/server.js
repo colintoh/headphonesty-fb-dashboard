@@ -175,6 +175,40 @@ app.post('/api/sync', express.raw({ type: 'application/octet-stream', limit: '10
   res.json({ ok: true, size: req.body.length, timestamp: new Date().toISOString() });
 });
 
+// Download DB from URL (for initial setup / large files)
+app.post('/api/sync-from-url', express.json(), async (req, res) => {
+  const token = req.headers['x-sync-token'];
+  if (token !== process.env.SYNC_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  
+  try {
+    const dataDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    
+    const { execSync } = require('child_process');
+    const isGzip = url.endsWith('.gz');
+    const tmpFile = isGzip ? DB_PATH + '.gz' : DB_PATH;
+    
+    console.log(`Downloading DB from ${url}...`);
+    execSync(`wget -q -O "${tmpFile}" "${url}"`, { timeout: 120000 });
+    
+    if (isGzip) {
+      execSync(`gunzip -f "${tmpFile}"`, { timeout: 30000 });
+    }
+    
+    const stats = fs.statSync(DB_PATH);
+    console.log(`DB downloaded: ${stats.size} bytes at ${new Date().toISOString()}`);
+    res.json({ ok: true, size: stats.size, timestamp: new Date().toISOString() });
+  } catch (e) {
+    console.error('Sync from URL failed:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   const dbExists = fs.existsSync(DB_PATH);
