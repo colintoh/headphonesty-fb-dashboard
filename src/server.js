@@ -209,6 +209,24 @@ app.post('/api/sync-from-url', express.json(), async (req, res) => {
   }
 });
 
+// WordPress posts proxy
+app.get('/api/wp-posts', async (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  const perPage = parseInt(req.query.per_page) || 100;
+  const after = new Date(Date.now() - days * 86400000).toISOString();
+  
+  try {
+    const url = `https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=${perPage}&after=${after}&_fields=id,date,title,status&status=publish&orderby=date&order=desc`;
+    const resp = await fetch(url);
+    const total = resp.headers.get('x-wp-total');
+    const posts = await resp.json();
+    res.json({ posts, total: parseInt(total) || posts.length });
+  } catch (e) {
+    console.error('WP API error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   const dbExists = fs.existsSync(DB_PATH);
