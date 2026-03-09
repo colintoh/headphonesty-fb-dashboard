@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Headphonesty FB Ops Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #e0e0e8;
+    --dim: #6b6b80;
+    --accent: #6366f1;
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --pink: #ec4899;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .header h1 span { color: var(--accent); }
+  .header .meta { color: var(--dim); font-size: 13px; }
+  .header .controls { display: flex; gap: 8px; align-items: center; }
+  .period-tabs { display: flex; gap: 6px; }
+  .period-tabs button {
+    background: var(--card); border: 1px solid var(--border); color: var(--dim);
+    padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.2s; font-family: inherit;
+  }
+  .period-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .period-tabs button:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+  .refresh-btn {
+    background: var(--card); border: 1px solid var(--border); color: var(--dim);
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 14px;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+  .refresh-btn.loading { animation: spin 1s linear infinite; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .kpi .label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi .value { font-size: 26px; font-weight: 700; letter-spacing: -1px; }
+  .kpi .delta { font-size: 12px; margin-top: 4px; }
+  .kpi .delta.up { color: var(--green); }
+  .kpi .delta.down { color: var(--red); }
+  .kpi .delta.flat { color: var(--dim); }
+
+  .grid { display: grid; gap: 16px; margin-bottom: 16px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-2-1 { grid-template-columns: 2fr 1fr; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h3 { font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .card canvas { max-height: 220px; }
+
+  .mix-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+  .mix-bar div { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: white; transition: width 0.5s; }
+  .mix-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .mix-legend span { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dim); }
+  .mix-legend .dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  .top-posts table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .top-posts th { text-align: left; padding: 6px 8px; color: var(--dim); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .top-posts td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .top-posts tr:last-child td { border-bottom: none; }
+  .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+  .type-fresh { background: #1e3a5f; color: #60a5fa; }
+  .type-meme { background: #3b1f4e; color: #c084fc; }
+  .type-story { background: #1e3b2e; color: #4ade80; }
+  .type-status { background: #3b2f1f; color: #fbbf24; }
+  .type-reel { background: #1f3b3b; color: #22d3ee; }
+  .type-other { background: #2a2a2a; color: #9ca3af; }
+  .msg-preview { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+
+  .heatmap-grid { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+  .heatmap-cell {
+    aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 600; position: relative; cursor: default;
+  }
+  .heatmap-cell:hover::after {
+    content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: #222; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; z-index: 10;
+  }
+  .heatmap-labels { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; margin-top: 4px; }
+  .heatmap-labels span { text-align: center; font-size: 9px; color: var(--dim); }
+
+  .target-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .target-label { width: 60px; font-size: 11px; color: var(--dim); text-transform: capitalize; }
+  .target-bar-bg { flex: 1; height: 20px; background: #1a1a2a; border-radius: 4px; overflow: hidden; position: relative; }
+  .target-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  .target-bar-marker { position: absolute; top: 0; height: 100%; width: 2px; background: white; opacity: 0.5; }
+  .target-pct { width: 40px; font-size: 12px; font-weight: 600; text-align: right; }
+
+  .loading-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    transition: opacity 0.3s;
+  }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .loader { font-size: 18px; color: var(--accent); }
+
+  .db-status { display: inline-flex; align-items: center; gap: 6px; }
+  .db-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .db-dot.ok { background: var(--green); }
+  .db-dot.error { background: var(--red); }
+
+  @media (max-width: 1200px) {
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .grid-2, .grid-3, .grid-2-1 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    body { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loader">📊 Loading dashboard...</div>
+</div>
+
+<div class="header">
+  <div>
+    <h1>📊 <span>Headphonesty</span> FB Ops</h1>
+    <div class="meta">
+      <span class="db-status"><span class="db-dot" id="dbDot"></span> <span id="dbStatus">Checking...</span></span>
+      · Last refresh: <span id="lastUpdate">—</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="period-tabs">
+      <button onclick="setPeriod(7)" id="btn7">7D</button>
+      <button onclick="setPeriod(14)" id="btn14">14D</button>
+      <button class="active" onclick="setPeriod(30)" id="btn30">30D</button>
+    </div>
+    <button class="refresh-btn" onclick="refreshData()" id="refreshBtn" title="Refresh data">🔄</button>
+  </div>
+</div>
+
+<div class="kpi-row" id="kpiRow"></div>
+
+<div class="grid grid-2-1">
+  <div class="card">
+    <h3>📈 Daily Reach</h3>
+    <canvas id="reachChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>🎯 Content Mix vs Target</h3>
+    <div id="mixTargets"></div>
+    <div style="margin-top: 16px;">
+      <h3 style="margin-bottom: 8px;">This Week's Mix</h3>
+      <div class="mix-bar" id="mixBar"></div>
+      <div class="mix-legend" id="mixLegend"></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-top: 16px;">
+  <div class="card">
+    <h3>📊 Avg Reach by Format</h3>
+    <canvas id="formatChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>🔥 Posting Heatmap (SGT) — Avg Reach by Hour</h3>
+    <div class="heatmap-grid" id="heatmap"></div>
+    <div class="heatmap-labels" id="heatmapLabels"></div>
+  </div>
+</div>
+
+<div class="grid" style="margin-top: 16px;">
+  <div class="card top-posts">
+    <h3>🏆 Top Posts — Last 30 Days</h3>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Type</th><th>Reach</th><th>Shares</th><th>Comments</th><th>Preview</th></tr>
+      </thead>
+      <tbody id="topPostsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-top: 16px;">
+  <div class="card">
+    <h3>💬 Daily Shares & Comments</h3>
+    <canvas id="engagementChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>📦 Posts Per Day</h3>
+    <canvas id="postsChart"></canvas>
+  </div>
+</div>
+
+<script>
+const typeColors = {
+  fresh: '#3b82f6', meme: '#a855f7', story: '#22c55e',
+  status: '#f59e0b', reel: '#06b6d4', other: '#6b7280'
+};
+const targets = { fresh: [40, 45], meme: [20, 25], story: [15, 20], status: [15, 20], reel: [0, 5] };
+
+let currentPeriod = 30;
+let dailyData = [], formatData = [], hourlyData = [], topPosts = [], mixData = [];
+let reachChart, engagementChart, postsChart, formatChart;
+
+function fmt(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function pctChange(curr, prev) {
+  if (!prev) return { cls: 'flat', txt: '—' };
+  const p = ((curr - prev) / prev * 100);
+  return { cls: p > 0 ? 'up' : p < 0 ? 'down' : 'flat', txt: (p > 0 ? '↑' : p < 0 ? '↓' : '→') + ' ' + Math.abs(p).toFixed(1) + '% vs prior' };
+}
+
+function setPeriod(days) {
+  currentPeriod = days;
+  document.querySelectorAll('.period-tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + days).classList.add('active');
+  render();
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+async function loadData() {
+  const [daily, formats, hourly, top, mix, health] = await Promise.all([
+    fetchJSON('/api/daily?days=60'),
+    fetchJSON('/api/formats?days=60'),
+    fetchJSON('/api/hourly?days=60'),
+    fetchJSON('/api/top-posts?days=30&limit=10'),
+    fetchJSON('/api/mix?days=60'),
+    fetchJSON('/api/health'),
+  ]);
+  dailyData = daily;
+  formatData = formats;
+  hourlyData = hourly;
+  topPosts = top;
+  mixData = mix;
+
+  const dot = document.getElementById('dbDot');
+  const status = document.getElementById('dbStatus');
+  dot.className = 'db-dot ' + (health.db ? 'ok' : 'error');
+  status.textContent = health.db ? 'DB connected' : 'DB missing';
+}
+
+async function refreshData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');
+  try {
+    await loadData();
+    render();
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-SG', { timeZone: 'Asia/Singapore' });
+  } catch (e) {
+    console.error(e);
+  }
+  btn.classList.remove('loading');
+}
+
+function getFiltered() { return dailyData.slice(-currentPeriod); }
+
+function renderKPIs(data) {
+  const half = Math.floor(data.length / 2);
+  const curr = data.slice(half);
+  const prev = data.slice(0, half);
+  const sum = (a, k) => a.reduce((s, d) => s + (d[k] || 0), 0);
+  const avg = (a, k) => sum(a, k) / (a.length || 1);
+  const kpis = [
+    { label: 'Total Reach', value: sum(curr, 'total_reach'), prev: sum(prev, 'total_reach') },
+    { label: 'Avg Reach/Post', value: Math.round(avg(curr, 'avg_reach')), prev: Math.round(avg(prev, 'avg_reach')) },
+    { label: 'Total Posts', value: sum(curr, 'posts'), prev: sum(prev, 'posts') },
+    { label: 'Total Shares', value: sum(curr, 'total_shares'), prev: sum(prev, 'total_shares') },
+    { label: 'Total Comments', value: sum(curr, 'total_comments'), prev: sum(prev, 'total_comments') },
+    { label: 'Avg Posts/Day', value: (sum(curr, 'posts') / curr.length).toFixed(1), prev: (sum(prev, 'posts') / (prev.length || 1)).toFixed(1), raw: true },
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k => {
+    const d = pctChange(k.raw ? parseFloat(k.value) : k.value, k.raw ? parseFloat(k.prev) : k.prev);
+    return `<div class="kpi"><div class="label">${k.label}</div><div class="value">${k.raw ? k.value : fmt(k.value)}</div><div class="delta ${d.cls}">${d.txt}</div></div>`;
+  }).join('');
+}
+
+function renderReachChart(data) {
+  const ctx = document.getElementById('reachChart').getContext('2d');
+  if (reachChart) reachChart.destroy();
+  reachChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: data.map(d => d.day.slice(5)), datasets: [{ label: 'Total Reach', data: data.map(d => d.total_reach), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmt(v), color: '#6b6b80' }, grid: { color: '#1e1e2e' } }, x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false } } } }
+  });
+}
+
+function renderEngagementChart(data) {
+  const ctx = document.getElementById('engagementChart').getContext('2d');
+  if (engagementChart) engagementChart.destroy();
+  engagementChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: data.map(d => d.day.slice(5)), datasets: [
+      { label: 'Shares', data: data.map(d => d.total_shares), backgroundColor: '#22c55e', borderRadius: 3 },
+      { label: 'Comments', data: data.map(d => d.total_comments), backgroundColor: '#3b82f6', borderRadius: 3 },
+    ] },
+    options: { responsive: true, plugins: { legend: { labels: { color: '#6b6b80', boxWidth: 10 } } }, scales: { y: { ticks: { color: '#6b6b80' }, grid: { color: '#1e1e2e' } }, x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false } } } }
+  });
+}
+
+function renderPostsChart(data) {
+  const ctx = document.getElementById('postsChart').getContext('2d');
+  if (postsChart) postsChart.destroy();
+  postsChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: data.map(d => d.day.slice(5)), datasets: [{ label: 'Posts', data: data.map(d => d.posts), backgroundColor: '#6366f1', borderRadius: 3 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#6b6b80' }, grid: { color: '#1e1e2e' }, beginAtZero: true }, x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false } } } }
+  });
+}
+
+function renderFormatChart() {
+  const ctx = document.getElementById('formatChart').getContext('2d');
+  if (formatChart) formatChart.destroy();
+  formatChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: formatData.map(d => d.post_type), datasets: [{ label: 'Avg Reach', data: formatData.map(d => d.avg_reach), backgroundColor: formatData.map(d => typeColors[d.post_type] || '#6b7280'), borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => fmt(v), color: '#6b6b80' }, grid: { color: '#1e1e2e' } }, y: { ticks: { color: '#e0e0e8' }, grid: { display: false } } } }
+  });
+}
+
+function renderHeatmap() {
+  const grid = document.getElementById('heatmap');
+  const labels = document.getElementById('heatmapLabels');
+  const maxReach = Math.max(...hourlyData.map(h => h.avg_reach));
+  grid.innerHTML = hourlyData.map(h => {
+    const i = h.avg_reach / maxReach;
+    const r = Math.round(99 + (34 - 99) * i), g = Math.round(102 + (197 - 102) * i), b = Math.round(241 + (94 - 241) * i);
+    return `<div class="heatmap-cell" style="background:rgba(${r},${g},${b},${0.3 + i * 0.7})" data-tip="${h.hour_sgt}:00 SGT · Avg ${fmt(h.avg_reach)} reach · ${h.posts} posts">${fmt(h.avg_reach)}</div>`;
+  }).join('');
+  labels.innerHTML = hourlyData.map(h => `<span>${h.hour_sgt}</span>`).join('');
+}
+
+function renderTopPosts() {
+  document.getElementById('topPostsBody').innerHTML = topPosts.map(p => `
+    <tr><td>${p.day}</td><td><span class="type-badge type-${p.post_type}">${p.post_type}</span></td>
+    <td style="font-weight:600">${fmt(p.reach)}</td><td>${p.shares}</td><td>${p.comments}</td>
+    <td class="msg-preview">${p.msg || '—'}</td></tr>
+  `).join('');
+}
+
+function renderContentMix() {
+  const last7 = new Set(dailyData.slice(-7).map(d => d.day));
+  const weekMix = {}; let weekTotal = 0;
+  mixData.forEach(d => { if (last7.has(d.day)) { weekMix[d.post_type] = (weekMix[d.post_type] || 0) + d.cnt; weekTotal += d.cnt; } });
+
+  document.getElementById('mixBar').innerHTML = Object.entries(weekMix).sort((a, b) => b[1] - a[1])
+    .map(([type, cnt]) => { const pct = (cnt / weekTotal * 100).toFixed(1); return `<div style="width:${pct}%;background:${typeColors[type] || '#6b7280'}">${pct > 8 ? type + ' ' + Math.round(pct) + '%' : ''}</div>`; }).join('');
+
+  document.getElementById('mixLegend').innerHTML = Object.entries(weekMix).sort((a, b) => b[1] - a[1])
+    .map(([type, cnt]) => `<span><span class="dot" style="background:${typeColors[type] || '#6b7280'}"></span>${type} ${(cnt / weekTotal * 100).toFixed(0)}% (${cnt})</span>`).join('');
+
+  document.getElementById('mixTargets').innerHTML = Object.entries(targets).map(([type, [lo, hi]]) => {
+    const actual = ((weekMix[type] || 0) / weekTotal * 100);
+    const inRange = actual >= lo && actual <= hi;
+    const barColor = inRange ? typeColors[type] : (actual < lo ? '#ef4444' : '#f59e0b');
+    return `<div class="target-row"><div class="target-label">${type}</div><div class="target-bar-bg"><div class="target-bar-fill" style="width:${Math.min(actual, 60)}%;background:${barColor}"></div><div class="target-bar-marker" style="left:${lo}%"></div><div class="target-bar-marker" style="left:${hi}%"></div></div><div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div></div>`;
+  }).join('');
+}
+
+function render() {
+  const data = getFiltered();
+  renderKPIs(data);
+  renderReachChart(data);
+  renderEngagementChart(data);
+  renderPostsChart(data);
+  renderFormatChart();
+  renderHeatmap();
+  renderTopPosts();
+  renderContentMix();
+}
+
+async function init() {
+  try {
+    await loadData();
+    render();
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-SG', { timeZone: 'Asia/Singapore' });
+  } catch (e) {
+    console.error('Failed to load:', e);
+  }
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+init();
+// Auto-refresh every 5 minutes
+setInterval(refreshData, 5 * 60 * 1000);
+</script>
+</body>
+</html>

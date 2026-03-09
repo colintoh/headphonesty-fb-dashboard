@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Headphonesty FB Ops Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #12121a;
+    --border: #1e1e2e;
+    --text: #e0e0e8;
+    --dim: #6b6b80;
+    --accent: #6366f1;
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --pink: #ec4899;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .header h1 span { color: var(--accent); }
+  .header .meta { color: var(--dim); font-size: 13px; }
+  .header .period-tabs {
+    display: flex; gap: 6px;
+  }
+  .header .period-tabs button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .header .period-tabs button.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .header .period-tabs button:hover:not(.active) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  /* KPI Row */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .kpi .label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi .value { font-size: 26px; font-weight: 700; letter-spacing: -1px; }
+  .kpi .delta { font-size: 12px; margin-top: 4px; }
+  .kpi .delta.up { color: var(--green); }
+  .kpi .delta.down { color: var(--red); }
+  .kpi .delta.flat { color: var(--dim); }
+
+  /* Grid */
+  .grid { display: grid; gap: 16px; margin-bottom: 16px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-2-1 { grid-template-columns: 2fr 1fr; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+  .card canvas { max-height: 220px; }
+
+  /* Content Mix Bar */
+  .mix-bar {
+    display: flex;
+    height: 28px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .mix-bar div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    transition: width 0.5s;
+  }
+  .mix-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .mix-legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .mix-legend .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* Top Posts Table */
+  .top-posts table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .top-posts th {
+    text-align: left;
+    padding: 6px 8px;
+    color: var(--dim);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .top-posts td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .top-posts tr:last-child td { border-bottom: none; }
+  .top-posts .type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .type-fresh { background: #1e3a5f; color: #60a5fa; }
+  .type-meme { background: #3b1f4e; color: #c084fc; }
+  .type-story { background: #1e3b2e; color: #4ade80; }
+  .type-status { background: #3b2f1f; color: #fbbf24; }
+  .type-reel { background: #1f3b3b; color: #22d3ee; }
+  .type-other { background: #2a2a2a; color: #9ca3af; }
+  .msg-preview {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--dim);
+  }
+
+  /* Posting Heatmap */
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 3px;
+  }
+  .heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    position: relative;
+    cursor: default;
+  }
+  .heatmap-cell:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .heatmap-labels {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .heatmap-labels span {
+    text-align: center;
+    font-size: 9px;
+    color: var(--dim);
+  }
+
+  /* Target bars */
+  .target-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .target-label {
+    width: 60px;
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: capitalize;
+  }
+  .target-bar-bg {
+    flex: 1;
+    height: 20px;
+    background: #1a1a2a;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .target-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s;
+  }
+  .target-bar-marker {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background: white;
+    opacity: 0.5;
+  }
+  .target-pct {
+    width: 40px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: right;
+  }
+
+  @media (max-width: 1200px) {
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .grid-2, .grid-3, .grid-2-1 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📊 <span>Headphonesty</span> FB Ops</h1>
+    <div class="meta">Last updated: <span id="lastUpdate"></span> · Data from posts.db</div>
+  </div>
+  <div class="period-tabs">
+    <button onclick="setPeriod(7)" id="btn7">7D</button>
+    <button onclick="setPeriod(14)" id="btn14">14D</button>
+    <button class="active" onclick="setPeriod(30)" id="btn30">30D</button>
+  </div>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row" id="kpiRow"></div>
+
+<!-- Charts Row 1 -->
+<div class="grid grid-2-1">
+  <div class="card">
+    <h3>📈 Daily Reach</h3>
+    <canvas id="reachChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>🎯 Content Mix vs Target</h3>
+    <div id="mixTargets"></div>
+    <div style="margin-top: 16px;">
+      <h3 style="margin-bottom: 8px;">This Week's Mix</h3>
+      <div class="mix-bar" id="mixBar"></div>
+      <div class="mix-legend" id="mixLegend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="grid grid-2" style="margin-top: 16px;">
+  <div class="card">
+    <h3>📊 Avg Reach by Format (Feb+)</h3>
+    <canvas id="formatChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>🔥 Posting Heatmap (SGT) — Avg Reach by Hour</h3>
+    <div class="heatmap-grid" id="heatmap"></div>
+    <div class="heatmap-labels" id="heatmapLabels"></div>
+  </div>
+</div>
+
+<!-- Top Posts -->
+<div class="grid" style="margin-top: 16px;">
+  <div class="card top-posts">
+    <h3>🏆 Top Posts — March 2026</h3>
+    <table id="topPostsTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Reach</th>
+          <th>Shares</th>
+          <th>Comments</th>
+          <th>Preview</th>
+        </tr>
+      </thead>
+      <tbody id="topPostsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Charts Row 3 -->
+<div class="grid grid-2" style="margin-top: 16px;">
+  <div class="card">
+    <h3>💬 Daily Shares & Comments</h3>
+    <canvas id="engagementChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>📦 Posts Per Day</h3>
+    <canvas id="postsChart"></canvas>
+  </div>
+</div>
+
+<script>
+// ===== DATA =====
+const dailyData = [{"day": "2026-02-01", "posts": 18, "avg_reach": 29008.0, "total_reach": 522149, "total_shares": 197, "total_comments": 1142, "total_reactions": 2619}, {"day": "2026-02-02", "posts": 16, "avg_reach": 16858.0, "total_reach": 269726, "total_shares": 155, "total_comments": 643, "total_reactions": 1736}, {"day": "2026-02-03", "posts": 18, "avg_reach": 25296.0, "total_reach": 455336, "total_shares": 247, "total_comments": 702, "total_reactions": 2512}, {"day": "2026-02-04", "posts": 18, "avg_reach": 20953.0, "total_reach": 377161, "total_shares": 139, "total_comments": 746, "total_reactions": 1409}, {"day": "2026-02-05", "posts": 18, "avg_reach": 31008.0, "total_reach": 558145, "total_shares": 214, "total_comments": 1195, "total_reactions": 2827}, {"day": "2026-02-06", "posts": 17, "avg_reach": 13655.0, "total_reach": 232140, "total_shares": 150, "total_comments": 587, "total_reactions": 1860}, {"day": "2026-02-07", "posts": 17, "avg_reach": 28362.0, "total_reach": 482156, "total_shares": 220, "total_comments": 968, "total_reactions": 2279}, {"day": "2026-02-08", "posts": 17, "avg_reach": 19244.0, "total_reach": 327148, "total_shares": 153, "total_comments": 1345, "total_reactions": 1500}, {"day": "2026-02-09", "posts": 18, "avg_reach": 24201.0, "total_reach": 435620, "total_shares": 138, "total_comments": 1309, "total_reactions": 1794}, {"day": "2026-02-10", "posts": 17, "avg_reach": 23916.0, "total_reach": 406578, "total_shares": 153, "total_comments": 863, "total_reactions": 1731}, {"day": "2026-02-11", "posts": 17, "avg_reach": 18700.0, "total_reach": 317898, "total_shares": 279, "total_comments": 839, "total_reactions": 2144}, {"day": "2026-02-12", "posts": 18, "avg_reach": 30927.0, "total_reach": 556685, "total_shares": 231, "total_comments": 738, "total_reactions": 2420}, {"day": "2026-02-13", "posts": 18, "avg_reach": 20817.0, "total_reach": 374698, "total_shares": 139, "total_comments": 789, "total_reactions": 1561}, {"day": "2026-02-14", "posts": 18, "avg_reach": 9946.0, "total_reach": 179028, "total_shares": 89, "total_comments": 1181, "total_reactions": 1082}, {"day": "2026-02-15", "posts": 16, "avg_reach": 22294.0, "total_reach": 356706, "total_shares": 217, "total_comments": 1205, "total_reactions": 1434}, {"day": "2026-02-16", "posts": 14, "avg_reach": 14516.0, "total_reach": 203225, "total_shares": 83, "total_comments": 540, "total_reactions": 1013}, {"day": "2026-02-17", "posts": 15, "avg_reach": 16683.0, "total_reach": 250244, "total_shares": 150, "total_comments": 314, "total_reactions": 1583}, {"day": "2026-02-18", "posts": 18, "avg_reach": 12165.0, "total_reach": 218961, "total_shares": 132, "total_comments": 635, "total_reactions": 1378}, {"day": "2026-02-19", "posts": 19, "avg_reach": 9122.0, "total_reach": 173315, "total_shares": 72, "total_comments": 595, "total_reactions": 867}, {"day": "2026-02-20", "posts": 18, "avg_reach": 8260.0, "total_reach": 148684, "total_shares": 113, "total_comments": 463, "total_reactions": 1023}, {"day": "2026-02-21", "posts": 14, "avg_reach": 9147.0, "total_reach": 128057, "total_shares": 76, "total_comments": 830, "total_reactions": 1036}, {"day": "2026-02-22", "posts": 13, "avg_reach": 11109.0, "total_reach": 144419, "total_shares": 60, "total_comments": 398, "total_reactions": 787}, {"day": "2026-02-23", "posts": 16, "avg_reach": 11132.0, "total_reach": 178116, "total_shares": 87, "total_comments": 840, "total_reactions": 742}, {"day": "2026-02-24", "posts": 18, "avg_reach": 30943.0, "total_reach": 556968, "total_shares": 466, "total_comments": 798, "total_reactions": 3713}, {"day": "2026-02-25", "posts": 18, "avg_reach": 16272.0, "total_reach": 292895, "total_shares": 174, "total_comments": 525, "total_reactions": 1907}, {"day": "2026-02-26", "posts": 18, "avg_reach": 13124.0, "total_reach": 236237, "total_shares": 112, "total_comments": 853, "total_reactions": 1160}, {"day": "2026-02-27", "posts": 15, "avg_reach": 11281.0, "total_reach": 169213, "total_shares": 115, "total_comments": 526, "total_reactions": 833}, {"day": "2026-02-28", "posts": 11, "avg_reach": 20390.0, "total_reach": 224294, "total_shares": 128, "total_comments": 323, "total_reactions": 891}, {"day": "2026-03-01", "posts": 14, "avg_reach": 11476.0, "total_reach": 160659, "total_shares": 42, "total_comments": 1188, "total_reactions": 633}, {"day": "2026-03-02", "posts": 14, "avg_reach": 46027.0, "total_reach": 644374, "total_shares": 452, "total_comments": 1183, "total_reactions": 3054}, {"day": "2026-03-03", "posts": 16, "avg_reach": 14999.0, "total_reach": 239983, "total_shares": 177, "total_comments": 542, "total_reactions": 1230}, {"day": "2026-03-04", "posts": 13, "avg_reach": 11482.0, "total_reach": 149265, "total_shares": 81, "total_comments": 437, "total_reactions": 810}, {"day": "2026-03-05", "posts": 14, "avg_reach": 28846.0, "total_reach": 403839, "total_shares": 394, "total_comments": 724, "total_reactions": 3090}, {"day": "2026-03-06", "posts": 14, "avg_reach": 20925.0, "total_reach": 292955, "total_shares": 106, "total_comments": 1012, "total_reactions": 1277}, {"day": "2026-03-07", "posts": 11, "avg_reach": 15118.0, "total_reach": 166295, "total_shares": 97, "total_comments": 677, "total_reactions": 661}, {"day": "2026-03-08", "posts": 11, "avg_reach": 7687.0, "total_reach": 84557, "total_shares": 52, "total_comments": 389, "total_reactions": 538}];
+const formatData = [{"post_type": "reel", "cnt": 21, "avg_reach": 50104.0, "total_reach": 1052184, "avg_shares": 19.0, "avg_comments": 17.4}, {"post_type": "story", "cnt": 18, "avg_reach": 44282.0, "total_reach": 797077, "avg_shares": 34.6, "avg_comments": 53.5}, {"post_type": "other", "cnt": 5, "avg_reach": 35575.0, "total_reach": 177874, "avg_shares": 46.8, "avg_comments": 337.2}, {"post_type": "fresh", "cnt": 189, "avg_reach": 29622.0, "total_reach": 5598544, "avg_shares": 11.3, "avg_comments": 33.1}, {"post_type": "status", "cnt": 69, "avg_reach": 16999.0, "total_reach": 1172911, "avg_shares": 1.3, "avg_comments": 221.0}, {"post_type": "meme", "cnt": 273, "avg_reach": 7762.0, "total_reach": 2119139, "avg_shares": 8.9, "avg_comments": 12.9}];
+const hourlyData = [{"hour_sgt": 0, "posts": 4, "avg_reach": 3925.0, "avg_shares": 0.3}, {"hour_sgt": 1, "posts": 33, "avg_reach": 31432.0, "avg_shares": 20.1}, {"hour_sgt": 2, "posts": 29, "avg_reach": 17231.0, "avg_shares": 15.1}, {"hour_sgt": 3, "posts": 6, "avg_reach": 32957.0, "avg_shares": 7.8}, {"hour_sgt": 4, "posts": 29, "avg_reach": 14466.0, "avg_shares": 13.4}, {"hour_sgt": 5, "posts": 30, "avg_reach": 21534.0, "avg_shares": 17.5}, {"hour_sgt": 6, "posts": 30, "avg_reach": 27721.0, "avg_shares": 14.0}, {"hour_sgt": 7, "posts": 5, "avg_reach": 13652.0, "avg_shares": 7.6}, {"hour_sgt": 8, "posts": 32, "avg_reach": 13355.0, "avg_shares": 9.7}, {"hour_sgt": 9, "posts": 28, "avg_reach": 15791.0, "avg_shares": 9.8}, {"hour_sgt": 10, "posts": 33, "avg_reach": 30588.0, "avg_shares": 10.1}, {"hour_sgt": 11, "posts": 30, "avg_reach": 13916.0, "avg_shares": 3.4}, {"hour_sgt": 12, "posts": 5, "avg_reach": 11476.0, "avg_shares": 0.6}, {"hour_sgt": 13, "posts": 33, "avg_reach": 16798.0, "avg_shares": 9.6}, {"hour_sgt": 14, "posts": 31, "avg_reach": 20824.0, "avg_shares": 12.5}, {"hour_sgt": 15, "posts": 23, "avg_reach": 14351.0, "avg_shares": 6.4}, {"hour_sgt": 16, "posts": 29, "avg_reach": 26852.0, "avg_shares": 13.0}, {"hour_sgt": 17, "posts": 8, "avg_reach": 7668.0, "avg_shares": 7.6}, {"hour_sgt": 18, "posts": 29, "avg_reach": 21918.0, "avg_shares": 9.9}, {"hour_sgt": 19, "posts": 24, "avg_reach": 8301.0, "avg_shares": 6.2}, {"hour_sgt": 20, "posts": 28, "avg_reach": 10129.0, "avg_shares": 8.7}, {"hour_sgt": 21, "posts": 12, "avg_reach": 12651.0, "avg_shares": 6.0}, {"hour_sgt": 22, "posts": 32, "avg_reach": 22300.0, "avg_shares": 8.2}, {"hour_sgt": 23, "posts": 32, "avg_reach": 15447.0, "avg_shares": 1.5}];
+const topPosts = [{"day": "2026-03-02", "post_type": "story", "reach": 349595, "shares": 279, "comments": 503, "reactions": 1790, "msg": "Ken Fritz chased the 'perfect sound' for nearly three decades. He gutted his liv"}, {"day": "2026-03-06", "post_type": "fresh", "reach": 176963, "shares": 30, "comments": 217, "reactions": 381, "msg": "Audiophiles have named the units that deliver something modern CD players have f"}, {"day": "2026-03-05", "post_type": "story", "reach": 102577, "shares": 64, "comments": 87, "reactions": 901, "msg": "Imagine being asked to perform one of the greatest rock songs ever written \u2014 in "}, {"day": "2026-03-02", "post_type": "fresh", "reach": 92619, "shares": 77, "comments": 240, "reactions": 479, "msg": "Vinyl measures worse than CD in dynamic range, distortion, noise, and channel se"}, {"day": "2026-03-05", "post_type": "story", "reach": 86159, "shares": 54, "comments": 105, "reactions": 720, "msg": "Meet Takeo Morita, a retired lawyer from Tokyo known as \"Rock Grandpa\" at his lo"}, {"day": "2026-03-04", "post_type": "fresh", "reach": 81955, "shares": 26, "comments": 70, "reactions": 303, "msg": "These amps were packed with hand-matched transistors, potted transformers, and p"}, {"day": "2026-03-05", "post_type": "story", "reach": 75522, "shares": 105, "comments": 105, "reactions": 451, "msg": "Zero Freitas has about eight million records and still can't stop buying more.\n\n"}, {"day": "2026-03-03", "post_type": "story", "reach": 54690, "shares": 30, "comments": 52, "reactions": 237, "msg": "A Saudi prince spent $1.5 million turning his $70 million superyacht into a floa"}, {"day": "2026-03-02", "post_type": "fresh", "reach": 54112, "shares": 25, "comments": 40, "reactions": 175, "msg": "Here are 25 recordings you can use to check headroom, bass control, imaging, and"}, {"day": "2026-03-03", "post_type": "fresh", "reach": 49213, "shares": 51, "comments": 117, "reactions": 323, "msg": "Here are seven scientific reasons why many engineers and audiophiles still prefe"}];
+const mixData = [{"day": "2026-02-01", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-01", "post_type": "meme", "cnt": 9}, {"day": "2026-02-01", "post_type": "reel", "cnt": 1}, {"day": "2026-02-01", "post_type": "status", "cnt": 2}, {"day": "2026-02-02", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-02", "post_type": "meme", "cnt": 8}, {"day": "2026-02-02", "post_type": "reel", "cnt": 1}, {"day": "2026-02-02", "post_type": "status", "cnt": 2}, {"day": "2026-02-03", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-03", "post_type": "meme", "cnt": 9}, {"day": "2026-02-03", "post_type": "reel", "cnt": 1}, {"day": "2026-02-03", "post_type": "status", "cnt": 2}, {"day": "2026-02-04", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-04", "post_type": "meme", "cnt": 9}, {"day": "2026-02-04", "post_type": "reel", "cnt": 1}, {"day": "2026-02-04", "post_type": "status", "cnt": 2}, {"day": "2026-02-05", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-05", "post_type": "meme", "cnt": 9}, {"day": "2026-02-05", "post_type": "reel", "cnt": 1}, {"day": "2026-02-05", "post_type": "status", "cnt": 2}, {"day": "2026-02-06", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-06", "post_type": "meme", "cnt": 9}, {"day": "2026-02-06", "post_type": "reel", "cnt": 1}, {"day": "2026-02-06", "post_type": "status", "cnt": 2}, {"day": "2026-02-07", "post_type": "fresh", "cnt": 7}, {"day": "2026-02-07", "post_type": "meme", "cnt": 8}, {"day": "2026-02-07", "post_type": "status", "cnt": 2}, {"day": "2026-02-08", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-08", "post_type": "meme", "cnt": 9}, {"day": "2026-02-08", "post_type": "other", "cnt": 1}, {"day": "2026-02-08", "post_type": "reel", "cnt": 1}, {"day": "2026-02-08", "post_type": "status", "cnt": 1}, {"day": "2026-02-09", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-09", "post_type": "meme", "cnt": 9}, {"day": "2026-02-09", "post_type": "reel", "cnt": 1}, {"day": "2026-02-09", "post_type": "status", "cnt": 2}, {"day": "2026-02-10", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-10", "post_type": "meme", "cnt": 9}, {"day": "2026-02-10", "post_type": "status", "cnt": 2}, {"day": "2026-02-11", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-11", "post_type": "meme", "cnt": 8}, {"day": "2026-02-11", "post_type": "other", "cnt": 1}, {"day": "2026-02-11", "post_type": "status", "cnt": 2}, {"day": "2026-02-12", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-12", "post_type": "meme", "cnt": 9}, {"day": "2026-02-12", "post_type": "reel", "cnt": 1}, {"day": "2026-02-12", "post_type": "status", "cnt": 2}, {"day": "2026-02-13", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-13", "post_type": "meme", "cnt": 9}, {"day": "2026-02-13", "post_type": "reel", "cnt": 1}, {"day": "2026-02-13", "post_type": "status", "cnt": 2}, {"day": "2026-02-14", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-14", "post_type": "meme", "cnt": 10}, {"day": "2026-02-14", "post_type": "status", "cnt": 2}, {"day": "2026-02-15", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-15", "post_type": "meme", "cnt": 9}, {"day": "2026-02-15", "post_type": "status", "cnt": 2}, {"day": "2026-02-16", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-16", "post_type": "meme", "cnt": 6}, {"day": "2026-02-16", "post_type": "reel", "cnt": 1}, {"day": "2026-02-16", "post_type": "status", "cnt": 2}, {"day": "2026-02-17", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-17", "post_type": "meme", "cnt": 9}, {"day": "2026-02-17", "post_type": "status", "cnt": 1}, {"day": "2026-02-18", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-18", "post_type": "meme", "cnt": 9}, {"day": "2026-02-18", "post_type": "reel", "cnt": 1}, {"day": "2026-02-18", "post_type": "status", "cnt": 2}, {"day": "2026-02-19", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-19", "post_type": "meme", "cnt": 10}, {"day": "2026-02-19", "post_type": "reel", "cnt": 1}, {"day": "2026-02-19", "post_type": "status", "cnt": 2}, {"day": "2026-02-20", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-20", "post_type": "meme", "cnt": 10}, {"day": "2026-02-20", "post_type": "status", "cnt": 2}, {"day": "2026-02-21", "post_type": "fresh", "cnt": 4}, {"day": "2026-02-21", "post_type": "meme", "cnt": 8}, {"day": "2026-02-21", "post_type": "status", "cnt": 2}, {"day": "2026-02-22", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-22", "post_type": "meme", "cnt": 7}, {"day": "2026-02-22", "post_type": "status", "cnt": 1}, {"day": "2026-02-23", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-23", "post_type": "meme", "cnt": 7}, {"day": "2026-02-23", "post_type": "reel", "cnt": 1}, {"day": "2026-02-23", "post_type": "status", "cnt": 2}, {"day": "2026-02-24", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-24", "post_type": "meme", "cnt": 9}, {"day": "2026-02-24", "post_type": "reel", "cnt": 1}, {"day": "2026-02-24", "post_type": "status", "cnt": 2}, {"day": "2026-02-25", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-25", "post_type": "meme", "cnt": 9}, {"day": "2026-02-25", "post_type": "reel", "cnt": 1}, {"day": "2026-02-25", "post_type": "status", "cnt": 2}, {"day": "2026-02-26", "post_type": "fresh", "cnt": 6}, {"day": "2026-02-26", "post_type": "meme", "cnt": 9}, {"day": "2026-02-26", "post_type": "other", "cnt": 1}, {"day": "2026-02-26", "post_type": "reel", "cnt": 1}, {"day": "2026-02-26", "post_type": "status", "cnt": 1}, {"day": "2026-02-27", "post_type": "fresh", "cnt": 5}, {"day": "2026-02-27", "post_type": "meme", "cnt": 7}, {"day": "2026-02-27", "post_type": "reel", "cnt": 1}, {"day": "2026-02-27", "post_type": "status", "cnt": 2}, {"day": "2026-02-28", "post_type": "fresh", "cnt": 4}, {"day": "2026-02-28", "post_type": "meme", "cnt": 4}, {"day": "2026-02-28", "post_type": "other", "cnt": 1}, {"day": "2026-02-28", "post_type": "status", "cnt": 2}, {"day": "2026-03-01", "post_type": "fresh", "cnt": 4}, {"day": "2026-03-01", "post_type": "meme", "cnt": 7}, {"day": "2026-03-01", "post_type": "other", "cnt": 1}, {"day": "2026-03-01", "post_type": "status", "cnt": 2}, {"day": "2026-03-02", "post_type": "fresh", "cnt": 5}, {"day": "2026-03-02", "post_type": "meme", "cnt": 5}, {"day": "2026-03-02", "post_type": "reel", "cnt": 1}, {"day": "2026-03-02", "post_type": "status", "cnt": 2}, {"day": "2026-03-02", "post_type": "story", "cnt": 1}, {"day": "2026-03-03", "post_type": "fresh", "cnt": 5}, {"day": "2026-03-03", "post_type": "meme", "cnt": 5}, {"day": "2026-03-03", "post_type": "status", "cnt": 3}, {"day": "2026-03-03", "post_type": "story", "cnt": 3}, {"day": "2026-03-04", "post_type": "fresh", "cnt": 4}, {"day": "2026-03-04", "post_type": "meme", "cnt": 5}, {"day": "2026-03-04", "post_type": "status", "cnt": 2}, {"day": "2026-03-04", "post_type": "story", "cnt": 2}, {"day": "2026-03-05", "post_type": "fresh", "cnt": 5}, {"day": "2026-03-05", "post_type": "meme", "cnt": 3}, {"day": "2026-03-05", "post_type": "reel", "cnt": 1}, {"day": "2026-03-05", "post_type": "status", "cnt": 2}, {"day": "2026-03-05", "post_type": "story", "cnt": 3}, {"day": "2026-03-06", "post_type": "fresh", "cnt": 3}, {"day": "2026-03-06", "post_type": "meme", "cnt": 5}, {"day": "2026-03-06", "post_type": "status", "cnt": 2}, {"day": "2026-03-06", "post_type": "story", "cnt": 4}, {"day": "2026-03-07", "post_type": "fresh", "cnt": 3}, {"day": "2026-03-07", "post_type": "meme", "cnt": 4}, {"day": "2026-03-07", "post_type": "status", "cnt": 2}, {"day": "2026-03-07", "post_type": "story", "cnt": 2}, {"day": "2026-03-08", "post_type": "fresh", "cnt": 3}, {"day": "2026-03-08", "post_type": "meme", "cnt": 2}, {"day": "2026-03-08", "post_type": "reel", "cnt": 1}, {"day": "2026-03-08", "post_type": "status", "cnt": 2}, {"day": "2026-03-08", "post_type": "story", "cnt": 3}];
+
+const typeColors = {
+  fresh: '#3b82f6', meme: '#a855f7', story: '#22c55e',
+  status: '#f59e0b', reel: '#06b6d4', other: '#6b7280'
+};
+const targets = { fresh: [40, 45], meme: [20, 25], story: [15, 20], status: [15, 20], reel: [0, 5] };
+
+let currentPeriod = 30;
+let reachChart, engagementChart, postsChart, formatChart;
+
+function setPeriod(days) {
+  currentPeriod = days;
+  document.querySelectorAll('.period-tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + days).classList.add('active');
+  render();
+}
+
+function getFiltered() {
+  return dailyData.slice(-currentPeriod);
+}
+
+function fmt(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function pctChange(curr, prev) {
+  if (!prev) return { val: 0, cls: 'flat', txt: '—' };
+  const p = ((curr - prev) / prev * 100);
+  return {
+    val: p,
+    cls: p > 0 ? 'up' : p < 0 ? 'down' : 'flat',
+    txt: (p > 0 ? '↑' : p < 0 ? '↓' : '→') + ' ' + Math.abs(p).toFixed(1) + '% vs prior'
+  };
+}
+
+function renderKPIs(data) {
+  const half = Math.floor(data.length / 2);
+  const curr = data.slice(half);
+  const prev = data.slice(0, half);
+
+  const sum = (arr, key) => arr.reduce((s, d) => s + (d[key] || 0), 0);
+  const avg = (arr, key) => sum(arr, key) / (arr.length || 1);
+
+  const kpis = [
+    { label: 'Total Reach', value: sum(curr, 'total_reach'), prev: sum(prev, 'total_reach') },
+    { label: 'Avg Reach/Post', value: Math.round(avg(curr, 'avg_reach')), prev: Math.round(avg(prev, 'avg_reach')) },
+    { label: 'Total Posts', value: sum(curr, 'posts'), prev: sum(prev, 'posts') },
+    { label: 'Total Shares', value: sum(curr, 'total_shares'), prev: sum(prev, 'total_shares') },
+    { label: 'Total Comments', value: sum(curr, 'total_comments'), prev: sum(prev, 'total_comments') },
+    { label: 'Avg Posts/Day', value: (sum(curr, 'posts') / curr.length).toFixed(1), prev: (sum(prev, 'posts') / (prev.length || 1)).toFixed(1), raw: true },
+  ];
+
+  const row = document.getElementById('kpiRow');
+  row.innerHTML = kpis.map(k => {
+    const delta = pctChange(k.raw ? parseFloat(k.value) : k.value, k.raw ? parseFloat(k.prev) : k.prev);
+    return `<div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value">${k.raw ? k.value : fmt(k.value)}</div>
+      <div class="delta ${delta.cls}">${delta.txt}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderReachChart(data) {
+  const ctx = document.getElementById('reachChart').getContext('2d');
+  if (reachChart) reachChart.destroy();
+  reachChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.day.slice(5)),
+      datasets: [{
+        label: 'Total Reach',
+        data: data.map(d => d.total_reach),
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { callback: v => fmt(v), color: '#6b6b80' }, grid: { color: '#1e1e2e' } },
+        x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderEngagementChart(data) {
+  const ctx = document.getElementById('engagementChart').getContext('2d');
+  if (engagementChart) engagementChart.destroy();
+  engagementChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.day.slice(5)),
+      datasets: [
+        { label: 'Shares', data: data.map(d => d.total_shares), backgroundColor: '#22c55e', borderRadius: 3 },
+        { label: 'Comments', data: data.map(d => d.total_comments), backgroundColor: '#3b82f6', borderRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#6b6b80', boxWidth: 10 } } },
+      scales: {
+        y: { ticks: { color: '#6b6b80' }, grid: { color: '#1e1e2e' }, stacked: false },
+        x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false }, stacked: false }
+      }
+    }
+  });
+}
+
+function renderPostsChart(data) {
+  const ctx = document.getElementById('postsChart').getContext('2d');
+  if (postsChart) postsChart.destroy();
+  postsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.day.slice(5)),
+      datasets: [{
+        label: 'Posts',
+        data: data.map(d => d.posts),
+        backgroundColor: '#6366f1',
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { color: '#6b6b80' }, grid: { color: '#1e1e2e' }, beginAtZero: true },
+        x: { ticks: { color: '#6b6b80', maxTicksLimit: 10 }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderFormatChart() {
+  const ctx = document.getElementById('formatChart').getContext('2d');
+  if (formatChart) formatChart.destroy();
+  formatChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: formatData.map(d => d.post_type),
+      datasets: [{
+        label: 'Avg Reach',
+        data: formatData.map(d => d.avg_reach),
+        backgroundColor: formatData.map(d => typeColors[d.post_type] || '#6b7280'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { callback: v => fmt(v), color: '#6b6b80' }, grid: { color: '#1e1e2e' } },
+        y: { ticks: { color: '#e0e0e8' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderHeatmap() {
+  const grid = document.getElementById('heatmap');
+  const labels = document.getElementById('heatmapLabels');
+  const maxReach = Math.max(...hourlyData.map(h => h.avg_reach));
+
+  grid.innerHTML = hourlyData.map(h => {
+    const intensity = h.avg_reach / maxReach;
+    const r = Math.round(99 + (34 - 99) * intensity);
+    const g = Math.round(102 + (197 - 102) * intensity);
+    const b = Math.round(241 + (94 - 241) * intensity);
+    const bg = `rgba(${r},${g},${b},${0.3 + intensity * 0.7})`;
+    return `<div class="heatmap-cell" style="background:${bg}" data-tip="${h.hour_sgt}:00 SGT · Avg ${fmt(h.avg_reach)} reach · ${h.posts} posts">${fmt(h.avg_reach)}</div>`;
+  }).join('');
+
+  labels.innerHTML = hourlyData.map(h =>
+    `<span>${h.hour_sgt}</span>`
+  ).join('');
+}
+
+function renderTopPosts() {
+  const tbody = document.getElementById('topPostsBody');
+  tbody.innerHTML = topPosts.map(p => `
+    <tr>
+      <td>${p.day}</td>
+      <td><span class="type-badge type-${p.post_type}">${p.post_type}</span></td>
+      <td style="font-weight:600">${fmt(p.reach)}</td>
+      <td>${p.shares}</td>
+      <td>${p.comments}</td>
+      <td class="msg-preview">${p.msg || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderContentMix() {
+  // Calculate this week's mix from mixData
+  const latestDay = dailyData[dailyData.length - 1]?.day;
+  if (!latestDay) return;
+
+  // Get last 7 days
+  const last7 = new Set(dailyData.slice(-7).map(d => d.day));
+  const weekMix = {};
+  let weekTotal = 0;
+  mixData.forEach(d => {
+    if (last7.has(d.day)) {
+      weekMix[d.post_type] = (weekMix[d.post_type] || 0) + d.cnt;
+      weekTotal += d.cnt;
+    }
+  });
+
+  // Mix bar
+  const bar = document.getElementById('mixBar');
+  const legend = document.getElementById('mixLegend');
+  bar.innerHTML = Object.entries(weekMix)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, cnt]) => {
+      const pct = (cnt / weekTotal * 100).toFixed(1);
+      return `<div style="width:${pct}%;background:${typeColors[type] || '#6b7280'}">${pct > 8 ? type + ' ' + Math.round(pct) + '%' : ''}</div>`;
+    }).join('');
+
+  legend.innerHTML = Object.entries(weekMix)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, cnt]) => {
+      const pct = (cnt / weekTotal * 100).toFixed(0);
+      return `<span><span class="dot" style="background:${typeColors[type] || '#6b7280'}"></span>${type} ${pct}% (${cnt})</span>`;
+    }).join('');
+
+  // Target bars
+  const container = document.getElementById('mixTargets');
+  container.innerHTML = Object.entries(targets).map(([type, [lo, hi]]) => {
+    const actual = ((weekMix[type] || 0) / weekTotal * 100);
+    const mid = (lo + hi) / 2;
+    const inRange = actual >= lo && actual <= hi;
+    const barColor = inRange ? typeColors[type] : (actual < lo ? '#ef4444' : '#f59e0b');
+    return `<div class="target-row">
+      <div class="target-label">${type}</div>
+      <div class="target-bar-bg">
+        <div class="target-bar-fill" style="width:${Math.min(actual, 60)}%;background:${barColor}"></div>
+        <div class="target-bar-marker" style="left:${lo}%" title="Target: ${lo}-${hi}%"></div>
+        <div class="target-bar-marker" style="left:${hi}%"></div>
+      </div>
+      <div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  const data = getFiltered();
+  renderKPIs(data);
+  renderReachChart(data);
+  renderEngagementChart(data);
+  renderPostsChart(data);
+  renderFormatChart();
+  renderHeatmap();
+  renderTopPosts();
+  renderContentMix();
+}
+
+document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-SG', { timeZone: 'Asia/Singapore' });
+render();
+</script>
+</body>
+</html>
