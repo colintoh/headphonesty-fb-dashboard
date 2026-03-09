@@ -102,12 +102,14 @@ app.get('/api/top-posts', (req, res) => {
   try {
     const rows = db.prepare(`
       SELECT 
+        id,
         substr(created_at, 1, 10) as day,
         post_type,
         reach,
         shares,
         comments,
         reactions,
+        link_url,
         substr(message, 1, 100) as msg
       FROM posts 
       WHERE created_at >= date('now', '-' || ? || ' days')
@@ -216,7 +218,7 @@ app.get('/api/wp-posts', async (req, res) => {
   const after = new Date(Date.now() - days * 86400000).toISOString();
   
   try {
-    const url = `https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=${perPage}&after=${after}&_fields=id,date,title,status&status=publish&orderby=date&order=desc`;
+    const url = `https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=${perPage}&after=${after}&_fields=id,date,title,status,link&status=publish&orderby=date&order=desc`;
     const resp = await fetch(url);
     const total = resp.headers.get('x-wp-total');
     const posts = await resp.json();
