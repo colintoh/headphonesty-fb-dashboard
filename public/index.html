@@ -112,12 +112,16 @@
   .heatmap-row-labels span { text-align: center; font-size: 9px; color: var(--dim); }
 
   /* GitHub-style contribution grid — responsive */
-  .contrib-grid { display: flex; gap: 2px; flex-wrap: nowrap; width: 100%; }
-  .contrib-week { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .contrib-grid { display: flex; gap: 2px; flex-wrap: nowrap; justify-content: center; }
+  .contrib-week { display: flex; flex-direction: column; gap: 2px; }
   .contrib-cell {
-    aspect-ratio: 1; border-radius: 2px; position: relative; cursor: default;
+    width: 18px; height: 18px; border-radius: 2px; position: relative; cursor: default;
     display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: rgba(255,255,255,0.8);
-    width: 100%;
+  }
+  @media (max-width: 768px) {
+    .contrib-cell { width: 14px; height: 14px; font-size: 7px; }
+    .contrib-grid { gap: 1px; }
+    .contrib-week { gap: 1px; }
   }
   .contrib-cell:hover::after {
     content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
