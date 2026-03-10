@@ -87,69 +87,71 @@ app.get('/api/realtime', async (req, res) => {
 });
 
 // ===== SCORECARDS (week-scoped with period-over-period) =====
-// ?weeksAgo=0 (default: this week), ?weeksAgo=1 (last week), etc.
+// Cache: past weeks never change, current week cached for 2 min
+const scorecardCache = new Map();
+const CACHE_TTL_CURRENT = 2 * 60 * 1000; // 2 min for current week
+const CACHE_TTL_PAST = 24 * 60 * 60 * 1000; // 24h for past weeks
+
+async function fetchLabby(startDate, endDate) {
+  const form = new FormData();
+  form.append('startDate', startDate);
+  form.append('endDate', endDate);
+  const resp = await fetch(LABBY_URL, { method: 'POST', headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` }, body: form });
+  return (await resp.json())?.data || {};
+}
+
 app.get('/api/scorecards', async (req, res) => {
   const weeksAgo = parseInt(req.query.weeksAgo) || 0;
+  const cacheKey = `sc_${weeksAgo}`;
+  const cached = scorecardCache.get(cacheKey);
+  const ttl = weeksAgo === 0 ? CACHE_TTL_CURRENT : CACHE_TTL_PAST;
+  if (cached && Date.now() - cached.ts < ttl) {
+    return res.json({ ...cached.data, cached: true });
+  }
+
   try {
     const wb = getWeekBounds(weeksAgo);
     const isCurrentWeek = weeksAgo === 0;
     const daysElapsed = isCurrentWeek ? wb.dayOfWeek : 7;
-
-    // For period-over-period: compare same # of elapsed days from prior week
     const priorWb = getWeekBounds(weeksAgo + 1);
-    // Prior week same window: Mon through (Mon + daysElapsed - 1)
     const priorEnd = new Date(priorWb.start + 'T00:00:00Z');
     priorEnd.setUTCDate(priorEnd.getUTCDate() + daysElapsed - 1);
     const priorEndStr = fmtDate(priorEnd);
-
-    // Current week end (for current week: today; for past weeks: Sunday)
     const currentEnd = isCurrentWeek ? fmtDate(nowSGT()) : wb.end;
 
-    // Fetch visitors — current period
-    const vData = await clickyFetch('visitors', { date: `${wb.start},${currentEnd}` });
+    // ALL 5 API calls in PARALLEL
+    const [vData, pvData, fbData, pfData, wpPosts] = await Promise.all([
+      clickyFetch('visitors', { date: `${wb.start},${currentEnd}` }),
+      clickyFetch('visitors', { date: `${priorWb.start},${priorEndStr}` }),
+      fetchLabby(wb.start, currentEnd),
+      fetchLabby(priorWb.start, priorEndStr),
+      fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`).then(r => r.json()).catch(() => []),
+    ]);
+
     const visitors = parseInt(vData[0]?.dates?.[0]?.items?.[0]?.value || '0');
-    const visitorsProjected = isCurrentWeek ? Math.round(visitors / daysElapsed * 7) : visitors;
-
-    // Fetch visitors — prior period (same window)
-    const pvData = await clickyFetch('visitors', { date: `${priorWb.start},${priorEndStr}` });
     const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
-
-    // Fetch FB data — current period
-    const form = new FormData();
-    form.append('startDate', wb.start);
-    form.append('endDate', currentEnd);
-    const fbResp = await fetch(LABBY_URL, { method: 'POST', headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` }, body: form });
-    const fbData = (await fbResp.json())?.data || {};
     const fbReach = fbData.totalReach || 0;
     const fbClicks = fbData.totalFacebookLinkClicks || 0;
+    const priorReach = pfData.totalReach || 0;
+    const priorClicks = pfData.totalFacebookLinkClicks || 0;
+    const articlesCount = Array.isArray(wpPosts) ? wpPosts.length : 0;
+
+    const visitorsProjected = isCurrentWeek ? Math.round(visitors / daysElapsed * 7) : visitors;
     const fbReachProjected = isCurrentWeek ? Math.round(fbReach / daysElapsed * 7) : fbReach;
     const fbClicksProjected = isCurrentWeek ? Math.round(fbClicks / daysElapsed * 7) : fbClicks;
 
-    // Fetch FB data — prior period (same window)
-    const pfForm = new FormData();
-    pfForm.append('startDate', priorWb.start);
-    pfForm.append('endDate', priorEndStr);
-    const pfResp = await fetch(LABBY_URL, { method: 'POST', headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` }, body: pfForm });
-    const pfData = (await pfResp.json())?.data || {};
-    const priorReach = pfData.totalReach || 0;
-    const priorClicks = pfData.totalFacebookLinkClicks || 0;
-
-    // WP articles for selected week
-    const wpResp = await fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`);
-    const wpPosts = await wpResp.json();
-    const articlesCount = Array.isArray(wpPosts) ? wpPosts.length : 0;
-
-    res.json({
-      weeksAgo,
-      isCurrentWeek,
-      daysElapsed,
+    const result = {
+      weeksAgo, isCurrentWeek, daysElapsed,
       weekRange: wb,
       priorWindow: { start: priorWb.start, end: priorEndStr },
       visitors: { current: visitors, projected: visitorsProjected, prior: priorVisitors, target: WEEKLY_TARGETS.visitors },
       fbReach: { current: fbReach, projected: fbReachProjected, prior: priorReach, target: WEEKLY_TARGETS.fb_reach },
       fbClicks: { current: fbClicks, projected: fbClicksProjected, prior: priorClicks, target: WEEKLY_TARGETS.fb_clicks },
       articles: { current: articlesCount, target: WEEKLY_TARGETS.articles }
-    });
+    };
+
+    scorecardCache.set(cacheKey, { ts: Date.now(), data: result });
+    res.json(result);
   } catch (e) {
     console.error('Scorecards error:', e);
     res.status(500).json({ error: e.message });
