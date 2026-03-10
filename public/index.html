@@ -125,6 +125,7 @@
     .msg-preview{max-width:130px}
     .sc .sc-value{font-size:18px}
     .cal-cell{min-height:22px;font-size:9px}
+    #fbCalPopup{left:0!important;right:0!important;bottom:0!important;top:auto!important;max-width:100%!important;max-height:60vh!important;border-radius:14px 14px 0 0!important;width:100%!important}
   }
 </style>
 </head>
@@ -205,10 +206,11 @@
   </div>
 </div>
 <!-- Post detail popup -->
+<div id="fbCalPopupOverlay" onclick="document.getElementById('fbCalPopup').style.display='none';this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199"></div>
 <div id="fbCalPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:500px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <div id="fbCalPopupTitle" style="font-size:13px;font-weight:700"></div>
-    <button onclick="document.getElementById('fbCalPopup').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
+    <button onclick="document.getElementById('fbCalPopup').style.display='none';document.getElementById('fbCalPopupOverlay').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
   </div>
   <div id="fbCalPopupMix" style="margin-bottom:8px"></div>
   <div id="fbCalPopupPosts"></div>
@@ -540,12 +542,16 @@ function showFBCalPopup(event,day){
   document.getElementById('fbCalPopupMix').innerHTML=mixHtml;
   document.getElementById('fbCalPopupPosts').innerHTML=tableHtml;
 
-  // Position popup near click
+  // Position popup
   popup.style.display='block';
-  const x=Math.min(event.clientX,window.innerWidth-520);
-  const y=Math.min(event.clientY+10,window.innerHeight-400);
-  popup.style.left=x+'px';
-  popup.style.top=y+'px';
+  document.getElementById('fbCalPopupOverlay').style.display='block';
+  const isMobile=window.innerWidth<=900;
+  if(!isMobile){
+    const x=Math.min(event.clientX,window.innerWidth-520);
+    const y=Math.min(event.clientY+10,window.innerHeight-400);
+    popup.style.left=x+'px';
+    popup.style.top=y+'px';
+  }
 }
 
 // Close popup when clicking outside
@@ -553,6 +559,7 @@ document.addEventListener('click',e=>{
   const popup=document.getElementById('fbCalPopup');
   if(popup&&popup.style.display==='block'&&!popup.contains(e.target)&&!e.target.classList.contains('cal-cell')){
     popup.style.display='none';
+    document.getElementById('fbCalPopupOverlay').style.display='none';
   }
 });
 
