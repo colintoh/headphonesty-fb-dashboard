@@ -287,6 +287,30 @@ app.get('/api/mix', (req, res) => {
   } finally { db.close(); }
 });
 
+// Posts detail by day (for distribution calendar popup)
+app.get('/api/fb-posts-detail', (req, res) => {
+  const { start, end } = getDateRange(req.query, 60);
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'DB not available' });
+  try {
+    const rows = db.prepare(`
+      SELECT ${SGT_DAY_EXPR} as day, id, post_type, reach, shares, comments, link_url, substr(message,1,120) as msg,
+        substr(created_at,12,5) as time_utc,
+        printf('%02d:%02d', (CAST(substr(created_at,12,2) AS INTEGER)+8)%24, CAST(substr(created_at,15,2) AS INTEGER)) as time_sgt
+      FROM posts
+      WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ?
+      ORDER BY created_at
+    `).all(start, end);
+    // Group by day
+    const byDay = {};
+    rows.forEach(r => {
+      if (!byDay[r.day]) byDay[r.day] = [];
+      byDay[r.day].push(r);
+    });
+    res.json(byDay);
+  } finally { db.close(); }
+});
+
 app.get('/api/fb-daily-posts', (req, res) => {
   const { start, end } = getDateRange(req.query, 7);
   const db = getDb();

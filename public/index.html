@@ -72,7 +72,7 @@
   .type-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase}
   .type-fresh{background:#1e3a5f;color:#60a5fa} .type-meme{background:#3b1f4e;color:#c084fc}
   .type-story{background:#1e3b2e;color:#4ade80} .type-status{background:#3b2f1f;color:#fbbf24}
-  .type-reel{background:#1f3b3b;color:#22d3ee} .type-other{background:#2a2a2a;color:#9ca3af}
+  .type-reel{background:#1f3b3b;color:#22d3ee} .type-recycled{background:#3b2510;color:#fb923c} .type-other{background:#2a2a2a;color:#9ca3af}
 
   /* Traffic sources list */
   .src-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
@@ -194,12 +194,32 @@
 <!-- Facebook -->
 <div class="section-label">📱 Facebook</div>
 <div class="grid grid-2">
+  <div class="card">
+    <h3>FB Distribution Calendar</h3>
+    <div id="fbCalGrid"></div>
+    <div class="cal-legend" id="fbCalLegend"></div>
+  </div>
+  <div class="card">
+    <h3>Day-of-Week Avg Posts (Last 8 Weeks)</h3>
+    <div id="fbWeekdayDist"></div>
+  </div>
+</div>
+<!-- Post detail popup -->
+<div id="fbCalPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:500px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div id="fbCalPopupTitle" style="font-size:13px;font-weight:700"></div>
+    <button onclick="document.getElementById('fbCalPopup').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
+  </div>
+  <div id="fbCalPopupMix" style="margin-bottom:8px"></div>
+  <div id="fbCalPopupPosts"></div>
+</div>
+<div class="grid grid-2">
   <div class="card"><h3>Daily Reach (30d)</h3><canvas id="reachChart"></canvas></div>
   <div class="card"><h3>Engagement — Comments & Shares</h3><canvas id="engagementChart"></canvas></div>
 </div>
 <div class="grid grid-3">
   <div class="card">
-    <h3>Content Mix (7d)</h3>
+    <h3>Content Mix <span id="mixPeriod">(This Week)</span></h3>
     <div class="mix-bar" id="mixBar"></div>
     <div class="mix-legend" id="mixLegend"></div>
     <div style="margin-top:10px" id="mixTargets"></div>
@@ -225,7 +245,7 @@
 </div>
 
 <script>
-const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b',reel:'#06b6d4',other:'#6b7280'};
+const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b',reel:'#06b6d4',recycled:'#f97316',other:'#6b7280'};
 const targets={fresh:42,meme:22,story:17,status:17,reel:2};
 const FB_DAILY_TARGET=16;
 let visitorsChart,reachChart,engagementChart;
@@ -414,6 +434,128 @@ async function loadPublishing(){
   }).join('');
 }
 
+// ===== FB DISTRIBUTION CALENDAR =====
+let fbCalDetailCache={};
+async function loadFBCalendar(){
+  const [fbDailyAll, detail]=await Promise.all([
+    fetchJSON('/api/fb-daily-posts?start='+(() => {const d=new Date(nowSGT());d.setUTCDate(d.getUTCDate()-56);return fmtDateSGT(d)})()+'&end='+fmtDateSGT(nowSGT())),
+    fetchJSON('/api/fb-posts-detail?start='+(() => {const d=new Date(nowSGT());d.setUTCDate(d.getUTCDate()-56);return fmtDateSGT(d)})()+'&end='+fmtDateSGT(nowSGT())),
+  ]);
+  fbCalDetailCache=detail;
+  const byDay={};
+  fbDailyAll.forEach(d=>{byDay[d.day]=d.posts});
+
+  // Build calendar grid (8 weeks, Mon-Sun)
+  const now=nowSGT();
+  const todaySGT=fmtDateSGT(now);
+  const startMon=new Date(now);
+  const dow=startMon.getUTCDay()||7;
+  startMon.setUTCDate(startMon.getUTCDate()-dow+1-7*7);
+  startMon.setUTCHours(0,0,0,0);
+  const weeks=[];
+  for(let w=0;w<8;w++){
+    const week=[];
+    for(let d=0;d<7;d++){
+      const date=new Date(startMon);
+      date.setUTCDate(startMon.getUTCDate()+w*7+d);
+      const key=fmtDateSGT(date);
+      const isFuture=key>todaySGT;
+      week.push({day:key,count:byDay[key]||0,future:isFuture});
+    }
+    weeks.push(week);
+  }
+
+  const maxC=Math.max(...weeks.flat().map(d=>d.count),1);
+  function cellColor(c,future){
+    if(future)return'transparent';
+    if(!c)return'#1a1a2a';
+    // Color based on target (16/day): red<8, orange 8-11, yellow 12-15, green 16+
+    if(c>=16)return'#166534';if(c>=12)return'#14532d';if(c>=8)return'#422006';return'#7f1d1d';
+  }
+
+  const dayHeaders=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let html=`<div class="cal-grid">${dayHeaders.map(d=>`<div class="cal-header">${d}</div>`).join('')}`;
+  weeks.forEach(week=>{
+    week.forEach(d=>{
+      const bg=cellColor(d.count,d.future);
+      const border=d.future?'border:1px dashed #2a2a2a':'';
+      const textColor=d.count>=16?'#86efac':d.count>=12?'#4ade80':d.count>=8?'#fcd34d':'#fca5a5';
+      html+=`<div class="cal-cell" style="background:${bg};${border};color:${d.future?'transparent':textColor};cursor:${d.future?'default':'pointer'}" data-day="${d.day}" onclick="showFBCalPopup(event,'${d.day}')">${d.future?'':d.count||''}</div>`;
+    });
+  });
+  html+='</div>';
+  document.getElementById('fbCalGrid').innerHTML=html;
+
+  const total=weeks.flat().filter(d=>!d.future).reduce((s,d)=>s+d.count,0);
+  const avgPerDay=total/(weeks.flat().filter(d=>!d.future).length||1);
+  document.getElementById('fbCalLegend').innerHTML=`<span><strong>${total}</strong> posts (8 weeks) · avg ${avgPerDay.toFixed(1)}/day</span><span style="margin-left:6px">Target: 16/day</span>`;
+
+  // Day-of-week avg for FB posts
+  const fbDowTotals=[0,0,0,0,0,0,0];
+  const fbDowWeeks=[0,0,0,0,0,0,0];
+  weeks.forEach(week=>week.forEach((d,i)=>{if(!d.future){fbDowTotals[i]+=d.count;fbDowWeeks[i]++}}));
+  const fbDowAvg=fbDowTotals.map((t,i)=>fbDowWeeks[i]?t/fbDowWeeks[i]:0);
+  const fbMaxAvg=Math.max(...fbDowAvg,1);
+  document.getElementById('fbWeekdayDist').innerHTML=dayHeaders.map((name,i)=>{
+    const avg=fbDowAvg[i];
+    const pct=(avg/fbMaxAvg*100);
+    const color=avg>=16?'var(--green)':avg>=12?'var(--orange)':'var(--red)';
+    return `<div class="dow-row"><div class="dow-label">${name}</div><div class="dow-bar-bg"><div class="dow-bar-fill" style="width:${pct}%;background:${color}">${avg.toFixed(1)}</div></div></div>`;
+  }).join('');
+}
+
+function showFBCalPopup(event,day){
+  const posts=fbCalDetailCache[day];
+  if(!posts||!posts.length)return;
+  const popup=document.getElementById('fbCalPopup');
+  
+  // Category breakdown
+  const cats={};
+  posts.forEach(p=>{cats[p.post_type]=(cats[p.post_type]||0)+1});
+  const mixHtml=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{
+    return `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px"><span style="width:8px;height:8px;border-radius:2px;background:${typeColors[t]||'#6b7280'}"></span><span style="font-size:11px;color:var(--dim)">${c} ${t}</span></span>`;
+  }).join('');
+
+  // Posts table
+  let tableHtml=`<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="border-bottom:1px solid #2e2e4e">
+      <th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">TIME</th>
+      <th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">TYPE</th>
+      <th style="text-align:right;padding:3px 4px;color:var(--dim);font-size:9px">REACH</th>
+      <th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">POST</th>
+    </tr></thead><tbody>`;
+  posts.forEach(p=>{
+    const fbLink=p.id?`https://www.facebook.com/${p.id}`:'#';
+    const preview=(p.msg||'—').slice(0,60)+(p.msg&&p.msg.length>60?'…':'');
+    tableHtml+=`<tr style="border-bottom:1px solid #1e1e2e">
+      <td style="padding:3px 4px;white-space:nowrap;color:var(--dim)">${p.time_sgt}</td>
+      <td style="padding:3px 4px"><span class="type-badge type-${p.post_type}">${p.post_type}</span></td>
+      <td style="padding:3px 4px;text-align:right;font-weight:600">${fmt(p.reach)}</td>
+      <td style="padding:3px 4px"><a href="${fbLink}" target="_blank" style="color:var(--accent);text-decoration:none">${preview}</a></td>
+    </tr>`;
+  });
+  tableHtml+='</tbody></table>';
+
+  document.getElementById('fbCalPopupTitle').textContent=`📱 ${day} · ${posts.length} posts`;
+  document.getElementById('fbCalPopupMix').innerHTML=mixHtml;
+  document.getElementById('fbCalPopupPosts').innerHTML=tableHtml;
+
+  // Position popup near click
+  popup.style.display='block';
+  const x=Math.min(event.clientX,window.innerWidth-520);
+  const y=Math.min(event.clientY+10,window.innerHeight-400);
+  popup.style.left=x+'px';
+  popup.style.top=y+'px';
+}
+
+// Close popup when clicking outside
+document.addEventListener('click',e=>{
+  const popup=document.getElementById('fbCalPopup');
+  if(popup&&popup.style.display==='block'&&!popup.contains(e.target)&&!e.target.classList.contains('cal-cell')){
+    popup.style.display='none';
+  }
+});
+
 // ===== TRAFFIC =====
 async function loadTraffic(){
   const [visitors,sources,topPages]=await Promise.all([
@@ -494,6 +636,12 @@ async function loadFacebook(){
   engagementChart=new Chart(ctx4,{type:'bar',data:{labels:daily.map(d=>d.day.slice(5)),datasets:[{label:'Shares',data:daily.map(d=>d.total_shares),backgroundColor:'#22c55e',borderRadius:3},{label:'Comments',data:daily.map(d=>d.total_comments),backgroundColor:'#3b82f6',borderRadius:3}]},options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10}}},scales:{y:{ticks:{color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}});
 
   // Mix
+  const sw2=getSelectedWeek();
+  const mixDayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const sgtNow=nowSGT();
+  const mixDow=(sgtNow.getUTCDay()||7)-1;
+  const mixLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
+  document.getElementById('mixPeriod').textContent=`(${mixLabel})`;
   const weekMix={};let weekTotal=0;
   mix.forEach(d=>{weekMix[d.post_type]=(weekMix[d.post_type]||0)+d.cnt;weekTotal+=d.cnt});
   document.getElementById('mixBar').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{const p=(c/weekTotal*100);return `<div style="width:${p}%;background:${typeColors[t]||'#6b7280'}">${p>8?t+' '+Math.round(p)+'%':''}</div>`}).join('');
@@ -563,7 +711,7 @@ async function loadFacebook(){
 async function refreshAll(){
   document.getElementById('refreshBtn').textContent='⏳';
   try{
-    await Promise.all([loadScorecards(),loadAlerts(),loadPublishing(),loadTraffic(),loadFacebook()]);
+    await Promise.all([loadScorecards(),loadAlerts(),loadPublishing(),loadFBCalendar(),loadTraffic(),loadFacebook()]);
     document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
   }catch(e){console.error(e)}
   document.getElementById('refreshBtn').textContent='🔄';
