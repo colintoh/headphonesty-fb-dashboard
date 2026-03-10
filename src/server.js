@@ -86,91 +86,69 @@ app.get('/api/realtime', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== SCORECARDS (weekly or monthly) =====
+// ===== SCORECARDS (week-scoped with period-over-period) =====
+// ?weeksAgo=0 (default: this week), ?weeksAgo=1 (last week), etc.
 app.get('/api/scorecards', async (req, res) => {
-  const period = req.query.period || 'weekly'; // weekly | monthly
+  const weeksAgo = parseInt(req.query.weeksAgo) || 0;
   try {
-    let visitorRange, fbRange, targetSet, daysElapsed, daysTotal;
+    const wb = getWeekBounds(weeksAgo);
+    const isCurrentWeek = weeksAgo === 0;
+    const daysElapsed = isCurrentWeek ? wb.dayOfWeek : 7;
 
-    if (period === 'monthly') {
-      const mb = getMonthBounds();
-      visitorRange = `${mb.start},${mb.end}`;
-      fbRange = { start: mb.start, end: mb.end };
-      targetSet = MONTHLY_TARGETS;
-      daysElapsed = mb.dayOfMonth;
-      daysTotal = mb.daysInMonth;
-    } else {
-      const wb = getWeekBounds();
-      visitorRange = `${wb.start},${wb.end}`;
-      fbRange = { start: wb.start, end: wb.end };
-      targetSet = WEEKLY_TARGETS;
-      daysElapsed = wb.dayOfWeek;
-      daysTotal = 7;
-    }
+    // For period-over-period: compare same # of elapsed days from prior week
+    const priorWb = getWeekBounds(weeksAgo + 1);
+    // Prior week same window: Mon through (Mon + daysElapsed - 1)
+    const priorEnd = new Date(priorWb.start + 'T00:00:00Z');
+    priorEnd.setUTCDate(priorEnd.getUTCDate() + daysElapsed - 1);
+    const priorEndStr = fmtDate(priorEnd);
 
-    // Fetch visitors
-    const vData = await clickyFetch('visitors', { date: visitorRange });
+    // Current week end (for current week: today; for past weeks: Sunday)
+    const currentEnd = isCurrentWeek ? fmtDate(nowSGT()) : wb.end;
+
+    // Fetch visitors — current period
+    const vData = await clickyFetch('visitors', { date: `${wb.start},${currentEnd}` });
     const visitors = parseInt(vData[0]?.dates?.[0]?.items?.[0]?.value || '0');
-    const visitorsProjected = Math.round(visitors / daysElapsed * daysTotal);
+    const visitorsProjected = isCurrentWeek ? Math.round(visitors / daysElapsed * 7) : visitors;
 
-    // Fetch FB data
+    // Fetch visitors — prior period (same window)
+    const pvData = await clickyFetch('visitors', { date: `${priorWb.start},${priorEndStr}` });
+    const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+
+    // Fetch FB data — current period
     const form = new FormData();
-    form.append('startDate', fbRange.start);
-    form.append('endDate', fbRange.end);
-    const fbResp = await fetch(LABBY_URL, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` },
-      body: form
-    });
+    form.append('startDate', wb.start);
+    form.append('endDate', currentEnd);
+    const fbResp = await fetch(LABBY_URL, { method: 'POST', headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` }, body: form });
     const fbData = (await fbResp.json())?.data || {};
     const fbReach = fbData.totalReach || 0;
     const fbClicks = fbData.totalFacebookLinkClicks || 0;
-    const fbReachProjected = Math.round(fbReach / daysElapsed * daysTotal);
-    const fbClicksProjected = Math.round(fbClicks / daysElapsed * daysTotal);
+    const fbReachProjected = isCurrentWeek ? Math.round(fbReach / daysElapsed * 7) : fbReach;
+    const fbClicksProjected = isCurrentWeek ? Math.round(fbClicks / daysElapsed * 7) : fbClicks;
 
-    // Fetch prior period for comparison
-    let priorVisitorRange, priorFbRange;
-    if (period === 'monthly') {
-      const pm = new Date();
-      pm.setMonth(pm.getMonth() - 1);
-      const pStart = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}-01`;
-      const pEnd = new Date(pm.getFullYear(), pm.getMonth() + 1, 0).toISOString().slice(0, 10);
-      priorVisitorRange = `${pStart},${pEnd}`;
-      priorFbRange = { start: pStart, end: pEnd };
-    } else {
-      const pw = getWeekBounds(1);
-      priorVisitorRange = `${pw.start},${pw.end}`;
-      priorFbRange = { start: pw.start, end: pw.end };
-    }
-
-    const pvData = await clickyFetch('visitors', { date: priorVisitorRange });
-    const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
-
+    // Fetch FB data — prior period (same window)
     const pfForm = new FormData();
-    pfForm.append('startDate', priorFbRange.start);
-    pfForm.append('endDate', priorFbRange.end);
-    const pfResp = await fetch(LABBY_URL, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` },
-      body: pfForm
-    });
+    pfForm.append('startDate', priorWb.start);
+    pfForm.append('endDate', priorEndStr);
+    const pfResp = await fetch(LABBY_URL, { method: 'POST', headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` }, body: pfForm });
     const pfData = (await pfResp.json())?.data || {};
     const priorReach = pfData.totalReach || 0;
     const priorClicks = pfData.totalFacebookLinkClicks || 0;
 
-    // WP articles this week
-    const wb = getWeekBounds();
+    // WP articles for selected week
     const wpResp = await fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`);
     const wpPosts = await wpResp.json();
     const articlesCount = Array.isArray(wpPosts) ? wpPosts.length : 0;
 
     res.json({
-      period,
-      dateRange: period === 'monthly' ? getMonthBounds() : getWeekBounds(),
-      visitors: { current: visitors, projected: visitorsProjected, prior: priorVisitors, target: targetSet.visitors },
-      fbReach: { current: fbReach, projected: fbReachProjected, prior: priorReach, target: targetSet.fb_reach },
-      fbClicks: { current: fbClicks, projected: fbClicksProjected, prior: priorClicks, target: targetSet.fb_clicks },
-      articles: { current: articlesCount, target: WEEKLY_TARGETS.articles, weekRange: wb }
+      weeksAgo,
+      isCurrentWeek,
+      daysElapsed,
+      weekRange: wb,
+      priorWindow: { start: priorWb.start, end: priorEndStr },
+      visitors: { current: visitors, projected: visitorsProjected, prior: priorVisitors, target: WEEKLY_TARGETS.visitors },
+      fbReach: { current: fbReach, projected: fbReachProjected, prior: priorReach, target: WEEKLY_TARGETS.fb_reach },
+      fbClicks: { current: fbClicks, projected: fbClicksProjected, prior: priorClicks, target: WEEKLY_TARGETS.fb_clicks },
+      articles: { current: articlesCount, target: WEEKLY_TARGETS.articles }
     });
   } catch (e) {
     console.error('Scorecards error:', e);

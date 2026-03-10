@@ -15,9 +15,14 @@
   .header h1{font-size:18px;font-weight:700} .header h1 span{color:var(--accent)}
   .header .meta{color:var(--dim);font-size:11px}
   .controls{display:flex;gap:6px;align-items:center}
-  .period-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit}
-  .period-btn.active{background:var(--accent);color:white;border-color:var(--accent)}
+  .week-nav{display:flex;align-items:center;gap:4px}
+  .week-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:13px;font-family:inherit;line-height:1}
+  .week-btn:hover{border-color:var(--accent);color:var(--text)}
+  .week-btn:disabled{opacity:0.3;cursor:not-allowed}
+  .week-label{font-size:12px;font-weight:600;color:var(--text);min-width:160px;text-align:center}
+  .week-label .current-badge{font-size:9px;color:var(--accent);font-weight:400;margin-left:4px}
   .refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px}
+  .refresh-btn:hover{border-color:var(--accent);color:var(--text)}
 
   /* Scorecard row with real-time */
   .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;min-height:110px}
@@ -129,9 +134,12 @@
     <div class="meta">Last refresh: <span id="lastUpdate">—</span> · <span id="dateRange"></span></div>
   </div>
   <div class="controls">
-    <button class="period-btn active" id="btnWeekly" onclick="setPeriod('weekly')">Weekly</button>
-    <button class="period-btn" id="btnMonthly" onclick="setPeriod('monthly')">Monthly</button>
-    <button class="refresh-btn" onclick="refreshAll()" id="refreshBtn">🔄</button>
+    <div class="week-nav">
+      <button class="week-btn" id="btnPrev" onclick="changeWeek(1)">◀</button>
+      <div class="week-label" id="weekLabel">This Week</div>
+      <button class="week-btn" id="btnNext" onclick="changeWeek(-1)" disabled>▶</button>
+    </div>
+    <button class="refresh-btn" onclick="refreshAll()" id="refreshBtn" title="Refresh all data">🔄</button>
   </div>
 </div>
 
@@ -218,17 +226,27 @@ const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b
 const targets={fresh:42,meme:22,story:17,status:17,reel:2};
 const FB_DAILY_TARGET=16;
 let visitorsChart,reachChart,engagementChart;
-let currentPeriod='weekly';
+let weeksAgo=0;
+const MAX_WEEKS_BACK=8;
 
 function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
 function pctDelta(curr,prev){if(!prev)return{txt:'—',cls:''};const p=((curr-prev)/prev*100);return{txt:(p>0?'↑':'↓')+Math.abs(p).toFixed(0)+'%',cls:p>=0?'sc-green':'sc-red'}}
 async function fetchJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json()}
 
-function setPeriod(p){
-  currentPeriod=p;
-  document.getElementById('btnWeekly').className='period-btn'+(p==='weekly'?' active':'');
-  document.getElementById('btnMonthly').className='period-btn'+(p==='monthly'?' active':'');
-  loadScorecards();
+function fmtWeekLabel(start,end){
+  const s=new Date(start+'T12:00:00');
+  const e=new Date(end+'T12:00:00');
+  const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${mo[s.getMonth()]} ${s.getDate()} – ${mo[e.getMonth()]} ${e.getDate()}`;
+}
+
+function changeWeek(dir){
+  weeksAgo+=dir;
+  if(weeksAgo<0)weeksAgo=0;
+  if(weeksAgo>MAX_WEEKS_BACK)weeksAgo=MAX_WEEKS_BACK;
+  document.getElementById('btnNext').disabled=weeksAgo===0;
+  document.getElementById('btnPrev').disabled=weeksAgo>=MAX_WEEKS_BACK;
+  refreshAll();
 }
 
 // ===== PULSE + SCORECARDS =====
@@ -236,27 +254,30 @@ async function loadScorecards(){
   try{
     const [rt,sc]=await Promise.all([
       fetchJSON('/api/realtime'),
-      fetchJSON(`/api/scorecards?period=${currentPeriod}`)
+      fetchJSON(`/api/scorecards?weeksAgo=${weeksAgo}`)
     ]);
     const v=rt.visitors;
     const pulseColor=v>=200?'var(--green)':v>=100?'var(--orange)':'var(--red)';
     const pulseBg=v>=200?'#052e16':v>=100?'#422006':'#450a0a';
     const pulseText=v>=200?'🟢 Strong':v>=100?'🟡 Normal':'🔴 Low';
 
-    const label=currentPeriod==='weekly'?'This Week':'This Month';
-    const dr=sc.dateRange;
-    document.getElementById('dateRange').textContent=`${dr.start} → ${dr.end||'now'}`;
+    // Update week label
+    const wr=sc.weekRange;
+    const wLabel=fmtWeekLabel(wr.start,wr.end);
+    document.getElementById('weekLabel').innerHTML=wLabel+(sc.isCurrentWeek?'<span class="current-badge">This Week</span>':'');
+    document.getElementById('dateRange').textContent=`${wr.start} → ${wr.end}`;
+
+    const compLabel=sc.isCurrentWeek?`vs prior week (Mon-${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][sc.daysElapsed-1]})`:'vs prior week';
 
     function mkCard(label,data){
       const pct=Math.min(data.current/data.target*100,100);
       const delta=pctDelta(data.current,data.prior);
       const pace=data.projected>=data.target?'sc-green':data.projected>=data.target*0.8?'sc-orange':'sc-red';
       const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';
-      const projText=data.projected?`Proj: ${fmt(data.projected)}`:'';
-      return `<div class="sc"><div class="sc-label">${label}</div><div class="sc-value">${fmt(data.current)}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${fmt(data.target)}</span></div><div class="sc-sub ${pace}">${projText}</div><div class="sc-delta ${delta.cls}">${delta.txt} vs prior ${currentPeriod==='weekly'?'week':'month'}</div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div></div>`;
+      const projText=sc.isCurrentWeek&&data.projected?`Proj: ${fmt(data.projected)}`:'';
+      return `<div class="sc"><div class="sc-label">${label}</div><div class="sc-value">${fmt(data.current)}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${fmt(data.target)}</span></div>${projText?`<div class="sc-sub ${pace}">${projText}</div>`:''}<div class="sc-delta ${delta.cls}">${delta.txt} ${compLabel}</div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div></div>`;
     }
 
-    let artDelta=pctDelta(sc.articles.current,null);
     const artPct=Math.min(sc.articles.current/sc.articles.target*100,100);
     const artPace=artPct>=100?'sc-green':artPct>=50?'sc-orange':'sc-red';
     const artFill=artPace==='sc-green'?'var(--green)':artPace==='sc-orange'?'var(--orange)':'var(--red)';
@@ -267,10 +288,10 @@ async function loadScorecards(){
         <div class="pulse-label">visitors now</div>
         <div class="pulse-badge" style="background:${pulseBg};color:${pulseColor}">${pulseText}</div>
       </div>
-      ${mkCard('Visitors '+label,sc.visitors)}
-      ${mkCard('FB Reach '+label,sc.fbReach)}
-      ${mkCard('FB Clicks '+label,sc.fbClicks)}
-      <div class="sc"><div class="sc-label">Articles This Week</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-sub" style="font-size:10px;color:var(--dim)">${sc.articles.weekRange.start} → ${sc.articles.weekRange.end}</div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
+      ${mkCard('Visitors',sc.visitors)}
+      ${mkCard('FB Reach',sc.fbReach)}
+      ${mkCard('FB Clicks',sc.fbClicks)}
+      <div class="sc"><div class="sc-label">Articles</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
     `;
   }catch(e){console.error('Scorecards:',e)}
 }
