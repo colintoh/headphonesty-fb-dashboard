@@ -450,7 +450,7 @@ async function loadTraffic(){
     const delta=pctDelta(val,pVal);
     const pct=(val/maxSrc*100);
     const colors={'Direct':'#6366f1','Searches':'#22c55e','Social media':'#f59e0b','AI':'#06b6d4','Advertising':'#a855f7','Links':'#ec4899'};
-    return `<div class="src-row"><div class="src-name">${i.title}</div><div class="src-val">${fmt(val)}</div><div class="src-delta ${delta.cls}">${delta.txt}</div><div class="src-bar-bg"><div class="src-bar-fill" style="width:${pct}%;background:${colors[i.title]||'#6b7280'}"></div></div></div>`;
+    return `<div class="src-row"><div class="src-name">${i.title}</div><div class="src-val">${fmt(val)}</div><div class="src-delta ${delta.cls}">${delta.txt}</div></div>`;
   }).join('');
 
   // Top pages
