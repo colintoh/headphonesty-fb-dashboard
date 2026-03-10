@@ -17,260 +17,256 @@ const CLICKY_BASE = 'https://api.clicky.com/api/stats/4';
 const LABBY_URL = 'https://labby.headphonesty.com/v1/facebook/reach';
 const LABBY_TOKEN = 'prod_cky_4f8e2b7c9a1d6e3f5b2c7a8e9d1f4b6c';
 
+// Weekly targets (derived from monthly)
+const MONTHLY_TARGETS = { visitors: 1500000, fb_reach: 16000000, fb_clicks: 200000 };
+const WEEKLY_TARGETS = {
+  visitors: Math.round(MONTHLY_TARGETS.visitors / 4.33),
+  fb_reach: Math.round(MONTHLY_TARGETS.fb_reach / 4.33),
+  fb_clicks: Math.round(MONTHLY_TARGETS.fb_clicks / 4.33),
+  articles: 15
+};
+
 function getDb() {
   if (!fs.existsSync(DB_PATH)) return null;
   return new Database(DB_PATH, { readonly: true });
 }
 
+function getWeekBounds(weeksAgo = 0) {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const diffToMon = day === 0 ? 6 : day - 1;
+  const mon = new Date(now);
+  mon.setDate(mon.getDate() - diffToMon - (weeksAgo * 7));
+  mon.setHours(0, 0, 0, 0);
+  const sun = new Date(mon);
+  sun.setDate(sun.getDate() + 6);
+  return {
+    start: mon.toISOString().slice(0, 10),
+    end: sun.toISOString().slice(0, 10),
+    dayOfWeek: diffToMon + 1 // 1=Mon ... 7=Sun
+  };
+}
+
+function getMonthBounds() {
+  const now = new Date();
+  const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const end = now.toISOString().slice(0, 10);
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return { start, end, dayOfMonth, daysInMonth };
+}
+
 async function clickyFetch(type, opts = {}) {
   const params = new URLSearchParams({
-    site_id: CLICKY_SITE_ID,
-    sitekey: CLICKY_SITE_KEY,
-    type,
-    output: 'json',
-    ...opts
+    site_id: CLICKY_SITE_ID, sitekey: CLICKY_SITE_KEY, type, output: 'json', ...opts
   });
   const r = await fetch(`${CLICKY_BASE}?${params}`);
   return r.json();
 }
 
-// ===== CLICKY ENDPOINTS =====
-
-// Real-time visitors
+// ===== REAL-TIME =====
 app.get('/api/realtime', async (req, res) => {
   try {
-    const data = await clickyFetch('visitors-online');
+    const data = await clickyFetch('visitors-online', { _: Date.now() });
     const count = parseInt(data[0]?.dates?.[0]?.items?.[0]?.value || '0');
     res.json({ visitors: count, timestamp: new Date().toISOString() });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Daily visitors trend
-app.get('/api/visitors', async (req, res) => {
-  const days = parseInt(req.query.days) || 30;
+// ===== SCORECARDS (weekly or monthly) =====
+app.get('/api/scorecards', async (req, res) => {
+  const period = req.query.period || 'weekly'; // weekly | monthly
   try {
-    const data = await clickyFetch('visitors', { date: `last-${days}-days`, daily: 1 });
-    const rows = data[0]?.dates?.map(d => ({
-      date: d.date,
-      visitors: parseInt(d.items?.[0]?.value || '0')
-    })) || [];
-    res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    let visitorRange, fbRange, targetSet, daysElapsed, daysTotal;
 
-// MTD visitors (for target tracking)
-app.get('/api/visitors-mtd', async (req, res) => {
-  try {
-    const now = new Date();
-    const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const today = now.toISOString().slice(0, 10);
-    const data = await clickyFetch('visitors', { date: `${startOfMonth},${today}` });
-    const total = parseInt(data[0]?.dates?.[0]?.items?.[0]?.value || '0');
-    const dayOfMonth = now.getDate();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const projected = Math.round(total / dayOfMonth * daysInMonth);
-    res.json({ mtd: total, projected, dayOfMonth, daysInMonth, target: 2000000 });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    if (period === 'monthly') {
+      const mb = getMonthBounds();
+      visitorRange = `${mb.start},${mb.end}`;
+      fbRange = { start: mb.start, end: mb.end };
+      targetSet = MONTHLY_TARGETS;
+      daysElapsed = mb.dayOfMonth;
+      daysTotal = mb.daysInMonth;
+    } else {
+      const wb = getWeekBounds();
+      visitorRange = `${wb.start},${wb.end}`;
+      fbRange = { start: wb.start, end: wb.end };
+      targetSet = WEEKLY_TARGETS;
+      daysElapsed = wb.dayOfWeek;
+      daysTotal = 7;
+    }
 
-// Traffic sources (daily or aggregate)
-app.get('/api/traffic-sources', async (req, res) => {
-  const days = parseInt(req.query.days) || 30;
-  const daily = req.query.daily === '1';
-  try {
-    const opts = { date: `last-${days}-days` };
-    if (daily) opts.daily = 1;
-    const data = await clickyFetch('traffic-sources', opts);
-    res.json(data[0]?.dates || []);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    // Fetch visitors
+    const vData = await clickyFetch('visitors', { date: visitorRange });
+    const visitors = parseInt(vData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+    const visitorsProjected = Math.round(visitors / daysElapsed * daysTotal);
 
-// Top pages
-app.get('/api/top-pages', async (req, res) => {
-  const days = parseInt(req.query.days) || 30;
-  const limit = parseInt(req.query.limit) || 10;
-  try {
-    const data = await clickyFetch('pages', { date: `last-${days}-days`, limit });
-    const pages = data[0]?.dates?.[0]?.items?.map(i => ({
-      title: i.title,
-      visitors: parseInt(i.value),
-      url: i.url
-    })) || [];
-    res.json(pages);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ===== LABBY / FACEBOOK ENDPOINTS =====
-
-app.get('/api/fb-reach', async (req, res) => {
-  try {
-    const now = new Date();
-    const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const today = now.toISOString().slice(0, 10);
-
+    // Fetch FB data
     const form = new FormData();
-    form.append('startDate', req.query.start || startOfMonth);
-    form.append('endDate', req.query.end || today);
-
-    const r = await fetch(LABBY_URL, {
+    form.append('startDate', fbRange.start);
+    form.append('endDate', fbRange.end);
+    const fbResp = await fetch(LABBY_URL, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` },
       body: form
     });
-    const data = await r.json();
-    const d = data?.data || {};
-    const s = d.summary || {};
+    const fbData = (await fbResp.json())?.data || {};
+    const fbReach = fbData.totalReach || 0;
+    const fbClicks = fbData.totalFacebookLinkClicks || 0;
+    const fbReachProjected = Math.round(fbReach / daysElapsed * daysTotal);
+    const fbClicksProjected = Math.round(fbClicks / daysElapsed * daysTotal);
 
-    const dayOfMonth = now.getDate();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    // Fetch prior period for comparison
+    let priorVisitorRange, priorFbRange;
+    if (period === 'monthly') {
+      const pm = new Date();
+      pm.setMonth(pm.getMonth() - 1);
+      const pStart = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}-01`;
+      const pEnd = new Date(pm.getFullYear(), pm.getMonth() + 1, 0).toISOString().slice(0, 10);
+      priorVisitorRange = `${pStart},${pEnd}`;
+      priorFbRange = { start: pStart, end: pEnd };
+    } else {
+      const pw = getWeekBounds(1);
+      priorVisitorRange = `${pw.start},${pw.end}`;
+      priorFbRange = { start: pw.start, end: pw.end };
+    }
+
+    const pvData = await clickyFetch('visitors', { date: priorVisitorRange });
+    const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+
+    const pfForm = new FormData();
+    pfForm.append('startDate', priorFbRange.start);
+    pfForm.append('endDate', priorFbRange.end);
+    const pfResp = await fetch(LABBY_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${LABBY_TOKEN}` },
+      body: pfForm
+    });
+    const pfData = (await pfResp.json())?.data || {};
+    const priorReach = pfData.totalReach || 0;
+    const priorClicks = pfData.totalFacebookLinkClicks || 0;
+
+    // WP articles this week
+    const wb = getWeekBounds();
+    const wpResp = await fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`);
+    const wpPosts = await wpResp.json();
+    const articlesCount = Array.isArray(wpPosts) ? wpPosts.length : 0;
 
     res.json({
-      reach: d.totalReach || 0,
-      reachProjected: Math.round((d.totalReach || 0) / dayOfMonth * daysInMonth),
-      reachTarget: 3000000,
-      clicks: d.totalFacebookLinkClicks || 0,
-      clicksProjected: Math.round((d.totalFacebookLinkClicks || 0) / dayOfMonth * daysInMonth),
-      clicksTarget: 45000,
-      clicksFromClicky: (s.totalClicksFreshPosts || 0) + (s.totalClicksRecycledPosts || 0),
-      totalPosts: s.totalPosts || 0,
-      freshPosts: s.uniqueFreshPosts || 0,
-      recycledPosts: s.uniqueRecycledPosts || 0,
-      engagement: s.totalSocialEngagement || 0,
-      avgEngagement: s.averageEngagementPerPost || 0,
-      dayOfMonth,
-      daysInMonth
+      period,
+      dateRange: period === 'monthly' ? getMonthBounds() : getWeekBounds(),
+      visitors: { current: visitors, projected: visitorsProjected, prior: priorVisitors, target: targetSet.visitors },
+      fbReach: { current: fbReach, projected: fbReachProjected, prior: priorReach, target: targetSet.fb_reach },
+      fbClicks: { current: fbClicks, projected: fbClicksProjected, prior: priorClicks, target: targetSet.fb_clicks },
+      articles: { current: articlesCount, target: WEEKLY_TARGETS.articles, weekRange: wb }
     });
   } catch (e) {
+    console.error('Scorecards error:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// ===== WORDPRESS ENDPOINTS =====
+// ===== TRAFFIC =====
+app.get('/api/visitors-daily', async (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  try {
+    const data = await clickyFetch('visitors', { date: `last-${days}-days`, daily: 1 });
+    res.json(data[0]?.dates?.map(d => ({ date: d.date, visitors: parseInt(d.items?.[0]?.value || '0') })) || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
+app.get('/api/traffic-sources', async (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  try {
+    // Current period
+    const current = await clickyFetch('traffic-sources', { date: `last-${days}-days` });
+    // Prior period
+    const now = new Date();
+    const priorEnd = new Date(now); priorEnd.setDate(priorEnd.getDate() - days);
+    const priorStart = new Date(priorEnd); priorStart.setDate(priorStart.getDate() - days);
+    const prior = await clickyFetch('traffic-sources', { date: `${priorStart.toISOString().slice(0,10)},${priorEnd.toISOString().slice(0,10)}` });
+    res.json({ current: current[0]?.dates?.[0]?.items || [], prior: prior[0]?.dates?.[0]?.items || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/top-pages', async (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  try {
+    const data = await clickyFetch('pages', { date: `last-${days}-days`, limit: req.query.limit || 8 });
+    res.json(data[0]?.dates?.[0]?.items?.map(i => ({ title: i.title, visitors: parseInt(i.value), url: i.url })) || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ===== WORDPRESS =====
 app.get('/api/wp-posts', async (req, res) => {
   const days = parseInt(req.query.days) || 60;
-  const perPage = parseInt(req.query.per_page) || 100;
   const after = new Date(Date.now() - days * 86400000).toISOString();
   try {
-    const url = `https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=${perPage}&after=${after}&_fields=id,date,title,status,link&status=publish&orderby=date&order=desc`;
-    const resp = await fetch(url);
-    const total = resp.headers.get('x-wp-total');
+    const resp = await fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${after}&_fields=id,date,title,status,link&status=publish&orderby=date&order=desc`);
     const posts = await resp.json();
-    res.json({ posts, total: parseInt(total) || posts.length });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ posts: Array.isArray(posts) ? posts : [], total: Array.isArray(posts) ? posts.length : 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== POSTS.DB ENDPOINTS =====
-
+// ===== POSTS.DB =====
 app.get('/api/daily', (req, res) => {
-  const days = parseInt(req.query.days) || 60;
+  const days = parseInt(req.query.days) || 30;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT substr(created_at, 1, 10) as day, COUNT(*) as posts,
-        ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach,
-        SUM(shares) as total_shares, SUM(comments) as total_comments
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      GROUP BY substr(created_at, 1, 10) ORDER BY day
-    `).all(days);
-    res.json(rows);
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10) ORDER BY day`).all(days));
   } finally { db.close(); }
 });
 
 app.get('/api/formats', (req, res) => {
-  const days = parseInt(req.query.days) || 60;
+  const days = parseInt(req.query.days) || 7;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach,
-        ROUND(AVG(shares),1) as avg_shares, ROUND(AVG(comments),1) as avg_comments
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      GROUP BY post_type ORDER BY avg_reach DESC
-    `).all(days);
-    res.json(rows);
+    res.json(db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY post_type ORDER BY avg_reach DESC`).all(days));
   } finally { db.close(); }
 });
 
 app.get('/api/hourly', (req, res) => {
-  const days = parseInt(req.query.days) || 60;
+  const days = parseInt(req.query.days) || 30;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT (CAST(substr(created_at, 12, 2) AS INTEGER) + 8) % 24 as hour_sgt,
-        COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      GROUP BY hour_sgt ORDER BY hour_sgt
-    `).all(days);
-    res.json(rows);
+    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY hour_sgt ORDER BY hour_sgt`).all(days));
   } finally { db.close(); }
 });
 
 app.get('/api/top-posts', (req, res) => {
-  const days = parseInt(req.query.days) || 30;
-  const limit = parseInt(req.query.limit) || 10;
+  const days = parseInt(req.query.days) || 7;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT id, substr(created_at, 1, 10) as day, post_type, reach, shares,
-        comments, reactions, link_url, substr(message, 1, 100) as msg
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      ORDER BY reach DESC LIMIT ?
-    `).all(days, limit);
-    res.json(rows);
+    res.json(db.prepare(`SELECT id, substr(created_at,1,10) as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE created_at >= date('now','-'||?||' days') ORDER BY reach DESC LIMIT 10`).all(days));
   } finally { db.close(); }
 });
 
 app.get('/api/mix', (req, res) => {
-  const days = parseInt(req.query.days) || 60;
+  const days = parseInt(req.query.days) || 7;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT substr(created_at, 1, 10) as day, post_type, COUNT(*) as cnt
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      GROUP BY substr(created_at, 1, 10), post_type ORDER BY day
-    `).all(days);
-    res.json(rows);
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, post_type, COUNT(*) as cnt FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10), post_type ORDER BY day`).all(days));
   } finally { db.close(); }
 });
 
-// FB posts per day (for slot tracking)
 app.get('/api/fb-daily-posts', (req, res) => {
-  const days = parseInt(req.query.days) || 14;
+  const days = parseInt(req.query.days) || 7;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    const rows = db.prepare(`
-      SELECT substr(created_at, 1, 10) as day, COUNT(*) as posts
-      FROM posts WHERE created_at >= date('now', '-' || ? || ' days')
-      GROUP BY substr(created_at, 1, 10) ORDER BY day
-    `).all(days);
-    res.json(rows);
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10) ORDER BY day`).all(days));
   } finally { db.close(); }
 });
 
-// ===== SYNC ENDPOINTS =====
-
+// ===== SYNC =====
 app.post('/api/sync', express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
   if (req.headers['x-sync-token'] !== process.env.SYNC_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
-  const dataDir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(DB_PATH, req.body);
   res.json({ ok: true, size: req.body.length });
 });
@@ -280,28 +276,21 @@ app.post('/api/sync-from-url', express.json(), async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
   try {
-    const dataDir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const { execSync } = require('child_process');
-    const isGzip = url.endsWith('.gz');
-    const tmpFile = isGzip ? DB_PATH + '.gz' : DB_PATH;
-    execSync(`wget -q -O "${tmpFile}" "${url}"`, { timeout: 120000 });
-    if (isGzip) execSync(`gunzip -f "${tmpFile}"`, { timeout: 30000 });
-    const stats = fs.statSync(DB_PATH);
-    res.json({ ok: true, size: stats.size });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    const tmp = url.endsWith('.gz') ? DB_PATH + '.gz' : DB_PATH;
+    execSync(`wget -q -O "${tmp}" "${url}"`, { timeout: 120000 });
+    if (url.endsWith('.gz')) execSync(`gunzip -f "${tmp}"`, { timeout: 30000 });
+    res.json({ ok: true, size: fs.statSync(DB_PATH).size });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', db: fs.existsSync(DB_PATH), timestamp: new Date().toISOString() });
 });
 
-// Serve static files
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Dashboard v2 running on port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`Dashboard v2 on port ${PORT}`));

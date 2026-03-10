@@ -7,177 +7,150 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  :root {
-    --bg: #0a0a0f; --card: #12121a; --border: #1e1e2e; --text: #e0e0e8;
-    --dim: #6b6b80; --accent: #6366f1; --green: #22c55e; --red: #ef4444;
-    --orange: #f59e0b; --blue: #3b82f6; --purple: #a855f7; --cyan: #06b6d4;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
+  :root { --bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--text:#e0e0e8;--dim:#6b6b80;--accent:#6366f1;--green:#22c55e;--red:#ef4444;--orange:#f59e0b;--blue:#3b82f6;--purple:#a855f7;--cyan:#06b6d4; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);padding:16px;min-height:100vh}
 
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
-  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
-  .header h1 span { color: var(--accent); }
-  .header .meta { color: var(--dim); font-size: 12px; }
-  .refresh-btn { background: var(--card); border: 1px solid var(--border); color: var(--dim); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+  .header h1{font-size:18px;font-weight:700} .header h1 span{color:var(--accent)}
+  .header .meta{color:var(--dim);font-size:11px}
+  .controls{display:flex;gap:6px;align-items:center}
+  .period-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit}
+  .period-btn.active{background:var(--accent);color:white;border-color:var(--accent)}
+  .refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px}
 
-  /* Health Pulse */
-  .pulse { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-  .pulse-number { font-size: 56px; font-weight: 800; letter-spacing: -3px; line-height: 1; }
-  .pulse-label { font-size: 13px; color: var(--dim); }
-  .pulse-status { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
-  .pulse-red { color: #fca5a5; border-color: #7f1d1d; }
-  .pulse-red .pulse-number { color: var(--red); }
-  .pulse-red .pulse-status { background: #7f1d1d; color: #fca5a5; }
-  .pulse-yellow { border-color: #78350f; }
-  .pulse-yellow .pulse-number { color: var(--orange); }
-  .pulse-yellow .pulse-status { background: #78350f; color: #fcd34d; }
-  .pulse-green { border-color: #14532d; }
-  .pulse-green .pulse-number { color: var(--green); }
-  .pulse-green .pulse-status { background: #14532d; color: #86efac; }
-  .pulse-trending { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
-  .pulse-trending a { font-size: 11px; color: var(--accent); text-decoration: none; background: #1e1e2e; padding: 3px 8px; border-radius: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  /* Scorecard row with real-time */
+  .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+  .pulse-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px}
+  .pulse-number{font-size:44px;font-weight:800;letter-spacing:-2px;line-height:1}
+  .pulse-label{font-size:10px;color:var(--dim);margin-top:4px}
+  .pulse-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:6px}
+  .sc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}
+  .sc .sc-label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+  .sc .sc-value{font-size:22px;font-weight:700;letter-spacing:-1px}
+  .sc .sc-sub{font-size:10px;margin-top:3px}
+  .sc .sc-bar{height:3px;background:#1a1a2a;border-radius:2px;margin-top:6px;overflow:hidden}
+  .sc .sc-fill{height:100%;border-radius:2px}
+  .sc-green{color:var(--green)} .sc-orange{color:var(--orange)} .sc-red{color:var(--red)}
+  .sc .sc-delta{font-size:10px;margin-top:2px}
 
-  /* Scorecard Row */
-  .scorecards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-  .scorecard { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .scorecard .sc-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .scorecard .sc-value { font-size: 24px; font-weight: 700; letter-spacing: -1px; }
-  .scorecard .sc-sub { font-size: 11px; color: var(--dim); margin-top: 4px; }
-  .scorecard .sc-bar { height: 4px; background: #1a1a2a; border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .scorecard .sc-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
-  .sc-on-track { color: var(--green); }
-  .sc-behind { color: var(--orange); }
-  .sc-danger { color: var(--red); }
+  .grid{display:grid;gap:12px;margin-bottom:12px}
+  .grid-2{grid-template-columns:1fr 1fr} .grid-3{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .card h3{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px}
+  .card canvas{max-height:200px}
+  .section-label{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;padding-left:4px;border-left:3px solid var(--accent)}
 
-  /* Grid */
-  .grid { display: grid; gap: 12px; margin-bottom: 12px; }
-  .grid-2 { grid-template-columns: 1fr 1fr; }
-  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-  .grid-2-1 { grid-template-columns: 2fr 1fr; }
-  .grid-1-2 { grid-template-columns: 1fr 2fr; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .card h3 { font-size: 11px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
-  .card canvas { max-height: 200px; }
+  /* Calendar grid (Mon-Sun columns, weeks as rows) */
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-header{font-size:9px;color:var(--dim);text-align:center;padding:2px 0;font-weight:600}
+  .cal-cell{aspect-ratio:1;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.8);cursor:default;position:relative;min-height:28px}
+  .cal-cell:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:4px 8px;border-radius:4px;font-size:10px;white-space:nowrap;z-index:10}
+  .cal-legend{display:flex;gap:4px;margin-top:6px;align-items:center;font-size:10px;color:var(--dim)}
+  .cal-legend .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
 
-  /* Section dividers */
-  .section-label { font-size: 11px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px; padding-left: 4px; border-left: 3px solid var(--accent); }
+  /* Weekday bars */
+  .dow-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .dow-label{width:28px;font-size:10px;color:var(--dim)}
+  .dow-bar-bg{flex:1;height:16px;background:#1a1a2a;border-radius:3px;overflow:hidden}
+  .dow-bar-fill{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:6px;font-size:9px;font-weight:600}
 
-  /* Contribution grid */
-  .contrib-grid { display: flex; gap: 2px; justify-content: center; }
-  .contrib-week { display: flex; flex-direction: column; gap: 2px; }
-  .contrib-cell { width: 18px; height: 18px; border-radius: 2px; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: rgba(255,255,255,0.8); cursor: default; position: relative; }
-  .contrib-cell:hover::after { content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; z-index: 10; }
-  .contrib-labels { display: flex; gap: 4px; margin-top: 6px; align-items: center; }
-  .contrib-labels span { font-size: 10px; color: var(--dim); }
-  .contrib-labels .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  /* Data table */
+  .data-table{width:100%;border-collapse:collapse;font-size:12px}
+  .data-table th{text-align:left;padding:4px 6px;color:var(--dim);font-weight:500;border-bottom:1px solid var(--border);font-size:9px;text-transform:uppercase}
+  .data-table td{padding:5px 6px;border-bottom:1px solid var(--border)}
+  .data-table tr:last-child td{border-bottom:none}
+  .data-table a{color:var(--accent);text-decoration:none}
+  .msg-preview{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+  .type-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase}
+  .type-fresh{background:#1e3a5f;color:#60a5fa} .type-meme{background:#3b1f4e;color:#c084fc}
+  .type-story{background:#1e3b2e;color:#4ade80} .type-status{background:#3b2f1f;color:#fbbf24}
+  .type-reel{background:#1f3b3b;color:#22d3ee} .type-other{background:#2a2a2a;color:#9ca3af}
 
-  /* Weekday heatmap */
-  .weekday-grid { display: grid; grid-template-columns: 40px repeat(1, 1fr); gap: 4px; }
-  .weekday-bar { height: 24px; border-radius: 3px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 600; }
-  .weekday-label { font-size: 11px; color: var(--dim); display: flex; align-items: center; }
+  /* Traffic sources list */
+  .src-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
+  .src-name{width:90px;color:var(--dim)}
+  .src-val{font-weight:700;width:60px}
+  .src-delta{font-size:11px;width:70px}
+  .src-bar-bg{flex:1;height:8px;background:#1a1a2a;border-radius:3px;overflow:hidden}
+  .src-bar-fill{height:100%;border-radius:3px}
 
-  /* Heatmap 3 rows */
-  .heatmap-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; margin-bottom: 3px; }
-  .heatmap-cell { border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; padding: 6px 2px; min-height: 30px; cursor: default; position: relative; }
-  .heatmap-cell:hover::after { content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; white-space: nowrap; z-index: 10; }
-  .heatmap-row-labels { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; margin-bottom: 8px; }
-  .heatmap-row-labels span { text-align: center; font-size: 9px; color: var(--dim); }
-
-  /* Tables */
-  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .data-table th { text-align: left; padding: 5px 6px; color: var(--dim); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; }
-  .data-table td { padding: 6px; border-bottom: 1px solid var(--border); }
-  .data-table tr:last-child td { border-bottom: none; }
-  .data-table a { color: var(--accent); text-decoration: none; }
-  .type-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; }
-  .type-fresh { background: #1e3a5f; color: #60a5fa; }
-  .type-meme { background: #3b1f4e; color: #c084fc; }
-  .type-story { background: #1e3b2e; color: #4ade80; }
-  .type-status { background: #3b2f1f; color: #fbbf24; }
-  .type-reel { background: #1f3b3b; color: #22d3ee; }
-  .type-other { background: #2a2a2a; color: #9ca3af; }
-  .msg-preview { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
-
-  /* Mix bars */
-  .mix-bar { display: flex; height: 24px; border-radius: 5px; overflow: hidden; }
-  .mix-bar div { display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: white; }
-  .mix-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-  .mix-legend span { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--dim); }
-  .mix-legend .dot { width: 7px; height: 7px; border-radius: 2px; }
-
-  /* Target bars */
-  .target-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .target-label { width: 50px; font-size: 10px; color: var(--dim); text-transform: capitalize; }
-  .target-bar-bg { flex: 1; height: 16px; background: #1a1a2a; border-radius: 3px; overflow: hidden; position: relative; }
-  .target-bar-fill { height: 100%; border-radius: 3px; }
-  .target-bar-marker { position: absolute; top: 0; height: 100%; width: 2px; background: white; opacity: 0.5; }
-  .target-pct { width: 35px; font-size: 11px; font-weight: 600; text-align: right; }
-
-  /* Alerts */
-  .alert { padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-  .alert-warn { background: #422006; border: 1px solid #78350f; color: #fcd34d; }
-  .alert-danger { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
-  .alert-ok { background: #052e16; border: 1px solid #14532d; color: #86efac; }
+  /* Mix / target */
+  .mix-bar{display:flex;height:22px;border-radius:5px;overflow:hidden}
+  .mix-bar div{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:white}
+  .mix-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+  .mix-legend span{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--dim)}
+  .mix-legend .dot{width:6px;height:6px;border-radius:2px}
+  .target-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .target-label{width:45px;font-size:10px;color:var(--dim);text-transform:capitalize}
+  .target-bar-bg{flex:1;height:14px;background:#1a1a2a;border-radius:3px;overflow:hidden;position:relative}
+  .target-bar-fill{height:100%;border-radius:3px}
+  .target-bar-marker{position:absolute;top:0;height:100%;width:2px;background:white;opacity:0.5}
+  .target-pct{width:30px;font-size:10px;font-weight:600;text-align:right}
 
   /* Slot tracker */
-  .slot-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .slot-day { text-align: center; }
-  .slot-day .day-label { font-size: 9px; color: var(--dim); margin-bottom: 3px; }
-  .slot-day .day-count { font-size: 18px; font-weight: 700; }
-  .slot-day .day-bar { height: 4px; background: #1a1a2a; border-radius: 2px; margin-top: 4px; overflow: hidden; }
-  .slot-day .day-fill { height: 100%; border-radius: 2px; }
+  .slot-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .slot-day{text-align:center}
+  .slot-day .day-label{font-size:8px;color:var(--dim);margin-bottom:2px}
+  .slot-day .day-count{font-size:16px;font-weight:700}
+  .slot-day .day-bar{height:3px;background:#1a1a2a;border-radius:2px;margin-top:3px;overflow:hidden}
+  .slot-day .day-fill{height:100%;border-radius:2px}
 
-  @media (max-width: 900px) {
-    .scorecards { grid-template-columns: repeat(2, 1fr); }
-    .grid-2, .grid-3, .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
-    .pulse { flex-direction: column; align-items: flex-start; }
-    .pulse-trending { margin-left: 0; }
-    .contrib-cell { width: 14px; height: 14px; font-size: 7px; }
-    .contrib-grid { gap: 1px; }
-    .contrib-week { gap: 1px; }
-    body { padding: 10px; }
-    .hide-mobile { display: none; }
-    .msg-preview { max-width: 140px; }
+  /* Heatmap */
+  .heatmap-row{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-bottom:2px}
+  .heatmap-cell{border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;padding:5px 1px;min-height:26px;cursor:default;position:relative}
+  .heatmap-cell:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:3px 6px;border-radius:4px;font-size:9px;white-space:nowrap;z-index:10}
+  .heatmap-row-labels{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-bottom:6px}
+  .heatmap-row-labels span{text-align:center;font-size:8px;color:var(--dim)}
+
+  /* Alerts */
+  .alert{padding:8px 12px;border-radius:6px;font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .alert-warn{background:#422006;border:1px solid #78350f;color:#fcd34d}
+  .alert-danger{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5}
+  .alert-ok{background:#052e16;border:1px solid #14532d;color:#86efac}
+
+  @media(max-width:900px){
+    .sc-row{grid-template-columns:1fr 1fr}
+    .pulse-card{grid-column:1/-1}
+    .grid-2,.grid-3{grid-template-columns:1fr}
+    body{padding:10px}
+    .hide-mobile{display:none}
+    .msg-preview{max-width:130px}
+    .sc .sc-value{font-size:18px}
+    .cal-cell{min-height:22px;font-size:9px}
   }
 </style>
 </head>
 <body>
 
-<!-- Health Pulse -->
 <div class="header">
   <div>
     <h1>📊 <span>Headphonesty</span> Ops</h1>
-    <div class="meta">Last refresh: <span id="lastUpdate">—</span></div>
+    <div class="meta">Last refresh: <span id="lastUpdate">—</span> · <span id="dateRange"></span></div>
   </div>
-  <button class="refresh-btn" onclick="refreshAll()" id="refreshBtn">🔄 Refresh</button>
+  <div class="controls">
+    <button class="period-btn active" id="btnWeekly" onclick="setPeriod('weekly')">Weekly</button>
+    <button class="period-btn" id="btnMonthly" onclick="setPeriod('monthly')">Monthly</button>
+    <button class="refresh-btn" onclick="refreshAll()" id="refreshBtn">🔄</button>
+  </div>
 </div>
 
-<div class="pulse" id="pulseCard">
-  <div>
-    <div class="pulse-number" id="realtimeCount">—</div>
-    <div class="pulse-label">visitors right now</div>
-  </div>
-  <div class="pulse-status" id="pulseStatus">Loading...</div>
-  <div class="pulse-trending" id="pulseTrending"></div>
-</div>
-
-<!-- Scorecards -->
-<div class="scorecards" id="scorecards"></div>
+<!-- Pulse + Scorecards -->
+<div class="sc-row" id="scRow"></div>
 
 <!-- Alerts -->
 <div id="alerts"></div>
 
-<!-- Publishing Health -->
+<!-- Publishing -->
 <div class="section-label">📝 Publishing</div>
 <div class="grid grid-2">
   <div class="card">
-    <h3>Article Publish Heatmap (60d)</h3>
-    <div id="wpContribGrid"></div>
-    <div class="contrib-labels" id="wpContribLegend"></div>
+    <h3>Article Publishing Calendar</h3>
+    <div id="calGrid"></div>
+    <div class="cal-legend" id="calLegend"></div>
   </div>
   <div class="card">
-    <h3>Day-of-Week Distribution</h3>
+    <h3>Day-of-Week Avg (Last 8 Weeks)</h3>
     <div id="weekdayDist"></div>
   </div>
 </div>
@@ -186,47 +159,38 @@
 <div class="section-label">📈 Traffic</div>
 <div class="grid grid-2">
   <div class="card">
-    <h3>Daily Visitors (30d)</h3>
+    <h3>Daily Visitors (30d) + 7-Day Moving Average</h3>
     <canvas id="visitorsChart"></canvas>
   </div>
   <div class="card">
-    <h3>Traffic Sources</h3>
-    <canvas id="sourcesChart"></canvas>
+    <h3>Traffic Sources (vs Prior Period)</h3>
+    <div id="sourcesList"></div>
   </div>
 </div>
 <div class="grid">
   <div class="card">
-    <h3>🏆 Top Articles by Traffic (30d)</h3>
-    <table class="data-table">
-      <thead><tr><th>#</th><th>Article</th><th>Visitors</th></tr></thead>
-      <tbody id="topPagesBody"></tbody>
-    </table>
+    <h3>🏆 Top Articles by Traffic (7d)</h3>
+    <table class="data-table"><thead><tr><th>#</th><th>Article</th><th>Visitors</th></tr></thead><tbody id="topPagesBody"></tbody></table>
   </div>
 </div>
 
 <!-- Facebook -->
 <div class="section-label">📱 Facebook</div>
 <div class="grid grid-2">
-  <div class="card">
-    <h3>Daily Reach (30d)</h3>
-    <canvas id="reachChart"></canvas>
-  </div>
-  <div class="card">
-    <h3>Engagement Quality — Comments & Shares</h3>
-    <canvas id="engagementChart"></canvas>
-  </div>
+  <div class="card"><h3>Daily Reach (30d)</h3><canvas id="reachChart"></canvas></div>
+  <div class="card"><h3>Engagement — Comments & Shares</h3><canvas id="engagementChart"></canvas></div>
 </div>
 <div class="grid grid-3">
   <div class="card">
-    <h3>Content Mix (This Week)</h3>
+    <h3>Content Mix (7d)</h3>
     <div class="mix-bar" id="mixBar"></div>
     <div class="mix-legend" id="mixLegend"></div>
-    <div style="margin-top: 12px;" id="mixTargets"></div>
+    <div style="margin-top:10px" id="mixTargets"></div>
   </div>
   <div class="card">
-    <h3>Posting Slots (Last 7d)</h3>
+    <h3>Posting Slots (7d)</h3>
     <div class="slot-grid" id="slotGrid"></div>
-    <div style="margin-top:8px;font-size:10px;color:var(--dim)">Target: 16 posts/day</div>
+    <div style="margin-top:6px;font-size:9px;color:var(--dim)">Target: 16 posts/day</div>
   </div>
   <div class="card">
     <h3>🔥 Posting Heatmap (SGT)</h3>
@@ -235,7 +199,7 @@
 </div>
 <div class="grid">
   <div class="card">
-    <h3>🏆 Top FB Posts (30d)</h3>
+    <h3>🏆 Top FB Posts (7d)</h3>
     <table class="data-table">
       <thead><tr><th>Date</th><th>Type</th><th>Reach</th><th class="hide-mobile">Shares</th><th class="hide-mobile">Comments</th><th>Preview</th><th></th></tr></thead>
       <tbody id="topPostsBody"></tbody>
@@ -244,277 +208,276 @@
 </div>
 
 <script>
-const typeColors = { fresh:'#3b82f6', meme:'#a855f7', story:'#22c55e', status:'#f59e0b', reel:'#06b6d4', other:'#6b7280' };
-const targets = { fresh: 42, meme: 22, story: 17, status: 17, reel: 2 };
-const FB_DAILY_TARGET = 16;
-const ARTICLES_WEEKLY_TARGET = 15;
+const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b',reel:'#06b6d4',other:'#6b7280'};
+const targets={fresh:42,meme:22,story:17,status:17,reel:2};
+const FB_DAILY_TARGET=16;
+let visitorsChart,reachChart,engagementChart;
+let currentPeriod='weekly';
 
-let visitorsChart, sourcesChart, reachChart, engagementChart;
+function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
+function pctDelta(curr,prev){if(!prev)return{txt:'—',cls:''};const p=((curr-prev)/prev*100);return{txt:(p>0?'↑':'↓')+Math.abs(p).toFixed(0)+'%',cls:p>=0?'sc-green':'sc-red'}}
+async function fetchJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json()}
 
-function fmt(n) { if(n>=1e6) return (n/1e6).toFixed(1)+'M'; if(n>=1e3) return (n/1e3).toFixed(1)+'K'; return n.toString(); }
-async function fetchJSON(url) { const r = await fetch(url); if(!r.ok) throw new Error(r.status); return r.json(); }
-
-// ===== REAL-TIME PULSE =====
-async function loadPulse() {
-  try {
-    const d = await fetchJSON('/api/realtime');
-    const v = d.visitors;
-    const el = document.getElementById('pulseCard');
-    const status = document.getElementById('pulseStatus');
-    document.getElementById('realtimeCount').textContent = v;
-    el.className = 'pulse ' + (v >= 200 ? 'pulse-green' : v >= 100 ? 'pulse-yellow' : 'pulse-red');
-    status.textContent = v >= 200 ? '🟢 Going strong' : v >= 100 ? '🟡 Normal' : '🔴 Low traffic';
-  } catch(e) { console.error('Pulse error:', e); }
+function setPeriod(p){
+  currentPeriod=p;
+  document.getElementById('btnWeekly').className='period-btn'+(p==='weekly'?' active':'');
+  document.getElementById('btnMonthly').className='period-btn'+(p==='monthly'?' active':'');
+  loadScorecards();
 }
 
-// ===== SCORECARDS =====
-async function loadScorecards() {
-  const [vmtd, fb, wp] = await Promise.all([
-    fetchJSON('/api/visitors-mtd'),
-    fetchJSON('/api/fb-reach').catch(() => null),
-    fetchJSON('/api/wp-posts?days=7').catch(() => ({ posts: [], total: 0 })),
-  ]);
+// ===== PULSE + SCORECARDS =====
+async function loadScorecards(){
+  try{
+    const [rt,sc]=await Promise.all([
+      fetchJSON('/api/realtime'),
+      fetchJSON(`/api/scorecards?period=${currentPeriod}`)
+    ]);
+    const v=rt.visitors;
+    const pulseColor=v>=200?'var(--green)':v>=100?'var(--orange)':'var(--red)';
+    const pulseBg=v>=200?'#052e16':v>=100?'#422006':'#450a0a';
+    const pulseText=v>=200?'🟢 Strong':v>=100?'🟡 Normal':'🔴 Low';
 
-  const cards = [];
+    const label=currentPeriod==='weekly'?'This Week':'This Month';
+    const dr=sc.dateRange;
+    document.getElementById('dateRange').textContent=`${dr.start} → ${dr.end||'now'}`;
 
-  // Total visitors MTD
-  const vPct = (vmtd.mtd / vmtd.target * 100);
-  const vPace = vmtd.projected >= vmtd.target ? 'on-track' : vmtd.projected >= vmtd.target * 0.8 ? 'behind' : 'danger';
-  cards.push({ label: 'Visitors MTD', value: fmt(vmtd.mtd), sub: `Projected: ${fmt(vmtd.projected)} / ${fmt(vmtd.target)}`, pct: Math.min(vPct, 100), pace: vPace });
+    function mkCard(label,data){
+      const pct=Math.min(data.current/data.target*100,100);
+      const delta=pctDelta(data.current,data.prior);
+      const pace=data.projected>=data.target?'sc-green':data.projected>=data.target*0.8?'sc-orange':'sc-red';
+      const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';
+      const projText=data.projected?`Proj: ${fmt(data.projected)}`:'';
+      return `<div class="sc"><div class="sc-label">${label}</div><div class="sc-value">${fmt(data.current)}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${fmt(data.target)}</span></div><div class="sc-sub ${pace}">${projText}</div><div class="sc-delta ${delta.cls}">${delta.txt} vs prior ${currentPeriod==='weekly'?'week':'month'}</div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div></div>`;
+    }
 
-  if (fb) {
-    // FB Reach MTD
-    const rPct = (fb.reach / fb.reachTarget * 100);
-    const rPace = fb.reachProjected >= fb.reachTarget ? 'on-track' : fb.reachProjected >= fb.reachTarget * 0.8 ? 'behind' : 'danger';
-    cards.push({ label: 'FB Reach MTD', value: fmt(fb.reach), sub: `Projected: ${fmt(fb.reachProjected)} / ${fmt(fb.reachTarget)}`, pct: Math.min(rPct, 100), pace: rPace });
+    let artDelta=pctDelta(sc.articles.current,null);
+    const artPct=Math.min(sc.articles.current/sc.articles.target*100,100);
+    const artPace=artPct>=100?'sc-green':artPct>=50?'sc-orange':'sc-red';
+    const artFill=artPace==='sc-green'?'var(--green)':artPace==='sc-orange'?'var(--orange)':'var(--red)';
 
-    // FB Clicks MTD
-    const cPct = (fb.clicks / fb.clicksTarget * 100);
-    const cPace = fb.clicksProjected >= fb.clicksTarget ? 'on-track' : fb.clicksProjected >= fb.clicksTarget * 0.8 ? 'behind' : 'danger';
-    cards.push({ label: 'FB Clicks MTD', value: fmt(fb.clicks), sub: `Projected: ${fmt(fb.clicksProjected)} / ${fmt(fb.clicksTarget)}`, pct: Math.min(cPct, 100), pace: cPace });
-  }
-
-  // Articles this week
-  const artCount = wp.posts?.length || 0;
-  const aPct = (artCount / ARTICLES_WEEKLY_TARGET * 100);
-  const aPace = aPct >= 100 ? 'on-track' : aPct >= 60 ? 'behind' : 'danger';
-  cards.push({ label: 'Articles This Week', value: artCount, sub: `Target: ${ARTICLES_WEEKLY_TARGET}/week`, pct: Math.min(aPct, 100), pace: aPace });
-
-  document.getElementById('scorecards').innerHTML = cards.map(c => {
-    const paceClass = c.pace === 'on-track' ? 'sc-on-track' : c.pace === 'behind' ? 'sc-behind' : 'sc-danger';
-    const fillColor = c.pace === 'on-track' ? 'var(--green)' : c.pace === 'behind' ? 'var(--orange)' : 'var(--red)';
-    return `<div class="scorecard">
-      <div class="sc-label">${c.label}</div>
-      <div class="sc-value">${c.value}</div>
-      <div class="sc-sub ${paceClass}">${c.sub}</div>
-      <div class="sc-bar"><div class="sc-fill" style="width:${c.pct}%;background:${fillColor}"></div></div>
-    </div>`;
-  }).join('');
+    document.getElementById('scRow').innerHTML=`
+      <div class="pulse-card" style="border-color:${pulseColor}30">
+        <div class="pulse-number" style="color:${pulseColor}">${v}</div>
+        <div class="pulse-label">visitors now</div>
+        <div class="pulse-badge" style="background:${pulseBg};color:${pulseColor}">${pulseText}</div>
+      </div>
+      ${mkCard('Visitors '+label,sc.visitors)}
+      ${mkCard('FB Reach '+label,sc.fbReach)}
+      ${mkCard('FB Clicks '+label,sc.fbClicks)}
+      <div class="sc"><div class="sc-label">Articles This Week</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-sub" style="font-size:10px;color:var(--dim)">${sc.articles.weekRange.start} → ${sc.articles.weekRange.end}</div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
+    `;
+  }catch(e){console.error('Scorecards:',e)}
 }
 
 // ===== ALERTS =====
-async function loadAlerts() {
-  const [wp, fbDaily] = await Promise.all([
-    fetchJSON('/api/wp-posts?days=7').catch(() => ({ posts: [] })),
-    fetchJSON('/api/fb-daily-posts?days=7').catch(() => []),
+async function loadAlerts(){
+  const [wp,fbDaily]=await Promise.all([
+    fetchJSON('/api/wp-posts?days=7').catch(()=>({posts:[]})),
+    fetchJSON('/api/fb-daily-posts?days=7').catch(()=>[]),
   ]);
-
-  const alerts = [];
-
-  // Publishing pace
-  const now = new Date();
-  const dayOfWeek = now.getDay() || 7; // 1=Mon ... 7=Sun
-  const expectedByNow = Math.round(ARTICLES_WEEKLY_TARGET / 7 * dayOfWeek);
-  const artCount = wp.posts?.length || 0;
-  if (artCount < expectedByNow * 0.7) {
-    alerts.push({ type: 'danger', msg: `⚠️ Publishing behind: ${artCount}/${ARTICLES_WEEKLY_TARGET} articles (expected ~${expectedByNow} by ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]})` });
-  } else if (artCount < expectedByNow) {
-    alerts.push({ type: 'warn', msg: `📝 Publishing slightly behind: ${artCount}/${ARTICLES_WEEKLY_TARGET} articles` });
+  const alerts=[];
+  const now=new Date();
+  const dow=(now.getDay()||7); // 1=Mon..7=Sun
+  const expected=Math.round(15/7*dow);
+  const art=wp.posts?.length||0;
+  if(art<expected*0.7) alerts.push({type:'danger',msg:`⚠️ Publishing behind: ${art}/15 articles (expected ~${expected} by day ${dow})`});
+  else if(art<expected) alerts.push({type:'warn',msg:`📝 Publishing slightly behind: ${art}/15 articles`});
+  const lowDays=fbDaily.filter(d=>d.posts<FB_DAILY_TARGET*0.5);
+  if(lowDays.length) alerts.push({type:'warn',msg:`📱 ${lowDays.length} day(s) below 8 FB posts: ${lowDays.map(d=>d.day.slice(5)).join(', ')}`});
+  if(wp.posts?.length>=3){
+    const early=wp.posts.filter(p=>{const d=new Date(p.date).getDay();return d>=1&&d<=3}).length;
+    const late=wp.posts.filter(p=>{const d=new Date(p.date).getDay();return d>=4&&d<=5}).length;
+    if(late>early*1.5&&late>3) alerts.push({type:'warn',msg:`📅 Backloaded: ${late} articles Thu-Fri vs ${early} Mon-Wed`});
   }
-
-  // Check if any day had 0 FB posts
-  const lowDays = fbDaily.filter(d => d.posts < FB_DAILY_TARGET * 0.5);
-  if (lowDays.length > 0) {
-    alerts.push({ type: 'warn', msg: `📱 ${lowDays.length} day(s) with <${Math.round(FB_DAILY_TARGET/2)} FB posts: ${lowDays.map(d => d.day.slice(5)).join(', ')}` });
-  }
-
-  // Day-of-week backloading check
-  if (wp.posts?.length >= 3) {
-    const earlyWeek = wp.posts.filter(p => { const d = new Date(p.date).getDay(); return d >= 1 && d <= 3; }).length;
-    const lateWeek = wp.posts.filter(p => { const d = new Date(p.date).getDay(); return d >= 4 && d <= 5; }).length;
-    if (lateWeek > earlyWeek * 1.5 && lateWeek > 3) {
-      alerts.push({ type: 'warn', msg: `📅 Publishing backloaded: ${lateWeek} articles Thu-Fri vs ${earlyWeek} Mon-Wed` });
-    }
-  }
-
-  if (alerts.length === 0) {
-    alerts.push({ type: 'ok', msg: '✅ All systems nominal' });
-  }
-
-  document.getElementById('alerts').innerHTML = alerts.map(a =>
-    `<div class="alert alert-${a.type}">${a.msg}</div>`
-  ).join('');
+  if(!alerts.length) alerts.push({type:'ok',msg:'✅ On track this week'});
+  document.getElementById('alerts').innerHTML=alerts.map(a=>`<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
 }
 
-// ===== PUBLISHING =====
-async function loadPublishing() {
-  const wp = await fetchJSON('/api/wp-posts?days=60').catch(() => ({ posts: [] }));
-  const posts = wp.posts || [];
+// ===== PUBLISHING CALENDAR =====
+async function loadPublishing(){
+  const wp=await fetchJSON('/api/wp-posts?days=60').catch(()=>({posts:[]}));
+  const posts=wp.posts||[];
+  const byDay={};
+  posts.forEach(p=>{const d=p.date.slice(0,10);byDay[d]=(byDay[d]||0)+1});
 
-  // Contribution grid
-  const byDay = {};
-  posts.forEach(p => { const d = p.date.slice(0,10); byDay[d] = (byDay[d]||0)+1; });
-  const days = [];
-  const now = new Date();
-  for (let i = 59; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate()-i); days.push({ day: d.toISOString().slice(0,10), count: byDay[d.toISOString().slice(0,10)]||0, dow: d.getDay() }); }
-  const maxC = Math.max(...days.map(d=>d.count),1);
-  function cellColor(c) { if(!c) return '#1a1a2a'; const i=c/maxC; return i<=0.25?'#0e4429':i<=0.5?'#006d32':i<=0.75?'#26a641':'#39d353'; }
-  const weeks = []; let cw = [];
-  for(let i=0;i<days[0].dow;i++) cw.push(null);
-  days.forEach(d => { cw.push(d); if(cw.length===7){weeks.push(cw);cw=[];} });
-  if(cw.length) weeks.push(cw);
-  document.getElementById('wpContribGrid').innerHTML = `<div class="contrib-grid">${weeks.map(w=>`<div class="contrib-week">${w.map(d=>d?`<div class="contrib-cell" style="background:${cellColor(d.count)}" data-tip="${d.day}: ${d.count}">${d.count||''}</div>`:`<div class="contrib-cell" style="background:transparent"></div>`).join('')}</div>`).join('')}</div>`;
-  const total = days.reduce((s,d)=>s+d.count,0);
-  const zeroDays = days.filter(d=>d.count===0).length;
-  document.getElementById('wpContribLegend').innerHTML = `<span><strong>${total} articles</strong> in 60d (${zeroDays} zero days)</span><span style="margin-left:8px">Less</span><div class="swatch" style="background:#1a1a2a"></div><div class="swatch" style="background:#0e4429"></div><div class="swatch" style="background:#006d32"></div><div class="swatch" style="background:#26a641"></div><div class="swatch" style="background:#39d353"></div><span>More</span>`;
+  // Build calendar: rows=weeks, columns=Mon-Sun
+  const now=new Date();
+  // Go back 8 weeks
+  const startMon=new Date(now);
+  startMon.setDate(startMon.getDate()-(startMon.getDay()||7)+1-7*7); // 8 weeks back, Monday
+  startMon.setHours(0,0,0,0);
+  const weeks=[];
+  for(let w=0;w<8;w++){
+    const week=[];
+    for(let d=0;d<7;d++){
+      const date=new Date(startMon);
+      date.setDate(startMon.getDate()+w*7+d);
+      const key=date.toISOString().slice(0,10);
+      const isFuture=date>now;
+      week.push({day:key,count:byDay[key]||0,future:isFuture});
+    }
+    weeks.push(week);
+  }
 
-  // Day-of-week distribution
-  const dowCounts = [0,0,0,0,0,0,0];
-  const dowNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  posts.forEach(p => { const d = new Date(p.date).getDay(); dowCounts[d]++; });
-  const maxDow = Math.max(...dowCounts, 1);
-  // Reorder to Mon-Sun
-  const ordered = [1,2,3,4,5,6,0];
-  document.getElementById('weekdayDist').innerHTML = ordered.map(i => {
-    const pct = (dowCounts[i]/maxDow*100);
-    const isLow = i >= 1 && i <= 3 && dowCounts[i] < dowCounts[4]; // Mon-Wed < Thu
-    const color = isLow ? 'var(--orange)' : 'var(--green)';
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="width:30px;font-size:11px;color:var(--dim)">${dowNames[i]}</div><div style="flex:1;height:18px;background:#1a1a2a;border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${color};border-radius:3px;display:flex;align-items:center;padding-left:6px;font-size:10px;font-weight:600">${dowCounts[i]}</div></div></div>`;
+  const maxC=Math.max(...weeks.flat().map(d=>d.count),1);
+  function cellColor(c,future){if(future)return'transparent';if(!c)return'#1a1a2a';const i=c/maxC;return i<=0.25?'#0e4429':i<=0.5?'#006d32':i<=0.75?'#26a641':'#39d353'}
+
+  const dayHeaders=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let html=`<div class="cal-grid">${dayHeaders.map(d=>`<div class="cal-header">${d}</div>`).join('')}`;
+  weeks.forEach(week=>{
+    week.forEach(d=>{
+      const bg=cellColor(d.count,d.future);
+      const border=d.future?'border:1px dashed #2a2a2a':'';
+      html+=`<div class="cal-cell" style="background:${bg};${border}" data-tip="${d.day}: ${d.count} article${d.count!==1?'s':''}">${d.future?'':d.count||''}</div>`;
+    });
+  });
+  html+='</div>';
+  document.getElementById('calGrid').innerHTML=html;
+
+  const total=weeks.flat().filter(d=>!d.future).reduce((s,d)=>s+d.count,0);
+  document.getElementById('calLegend').innerHTML=`<span><strong>${total}</strong> articles (8 weeks)</span><span style="margin-left:6px">Less</span><div class="sw" style="background:#1a1a2a"></div><div class="sw" style="background:#0e4429"></div><div class="sw" style="background:#006d32"></div><div class="sw" style="background:#26a641"></div><div class="sw" style="background:#39d353"></div><span>More</span>`;
+
+  // Day-of-week avg (8 weeks)
+  const dowTotals=[0,0,0,0,0,0,0];
+  const dowWeeks=[0,0,0,0,0,0,0];
+  weeks.forEach(week=>week.forEach((d,i)=>{if(!d.future){dowTotals[i]+=d.count;dowWeeks[i]++}}));
+  const dowAvg=dowTotals.map((t,i)=>dowWeeks[i]?t/dowWeeks[i]:0);
+  const maxAvg=Math.max(...dowAvg,1);
+  const dowLabels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  document.getElementById('weekdayDist').innerHTML=dowLabels.map((name,i)=>{
+    const avg=dowAvg[i];
+    const pct=(avg/maxAvg*100);
+    const isLow=i<3&&avg<dowAvg[3]; // Mon-Wed lower than Thu
+    const color=isLow?'var(--orange)':'var(--green)';
+    return `<div class="dow-row"><div class="dow-label">${name}</div><div class="dow-bar-bg"><div class="dow-bar-fill" style="width:${pct}%;background:${color}">${avg.toFixed(1)}</div></div></div>`;
   }).join('');
 }
 
 // ===== TRAFFIC =====
-async function loadTraffic() {
-  const [visitors, sources, topPages] = await Promise.all([
-    fetchJSON('/api/visitors?days=30'),
-    fetchJSON('/api/traffic-sources?days=30'),
-    fetchJSON('/api/top-pages?days=30&limit=8'),
+async function loadTraffic(){
+  const [visitors,sources,topPages]=await Promise.all([
+    fetchJSON('/api/visitors-daily?days=30'),
+    fetchJSON('/api/traffic-sources?days=7'),
+    fetchJSON('/api/top-pages?days=7&limit=8'),
   ]);
 
-  // Visitors chart
-  const ctx1 = document.getElementById('visitorsChart').getContext('2d');
-  if(visitorsChart) visitorsChart.destroy();
-  visitorsChart = new Chart(ctx1, {
-    type: 'line',
-    data: { labels: visitors.map(d=>d.date.slice(5)), datasets: [{ label:'Visitors', data: visitors.map(d=>d.visitors), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', fill:true, tension:0.3, pointRadius:2, borderWidth:2 }] },
-    options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}}, x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}} } }
+  // Visitors with 7-day SMA
+  const sma=[];
+  visitors.forEach((d,i)=>{
+    if(i<6){sma.push(null);return}
+    const sum=visitors.slice(i-6,i+1).reduce((s,x)=>s+x.visitors,0);
+    sma.push(Math.round(sum/7));
   });
 
-  // Sources donut
-  const srcData = sources[0]?.items?.filter(i => ['Direct','Searches','Social media'].includes(i.title)) || [];
-  const ctx2 = document.getElementById('sourcesChart').getContext('2d');
-  if(sourcesChart) sourcesChart.destroy();
-  const srcColors = { 'Direct':'#6366f1', 'Searches':'#22c55e', 'Social media':'#f59e0b' };
-  sourcesChart = new Chart(ctx2, {
-    type: 'doughnut',
-    data: { labels: srcData.map(s=>s.title), datasets: [{ data: srcData.map(s=>parseInt(s.value)), backgroundColor: srcData.map(s=>srcColors[s.title]||'#6b7280'), borderWidth: 0 }] },
-    options: { responsive:true, plugins:{ legend:{ position:'bottom', labels:{color:'#6b6b80',boxWidth:10,font:{size:11}} } } }
+  const ctx1=document.getElementById('visitorsChart').getContext('2d');
+  if(visitorsChart)visitorsChart.destroy();
+  visitorsChart=new Chart(ctx1,{
+    type:'line',
+    data:{labels:visitors.map(d=>d.date.slice(5)),datasets:[
+      {label:'Visitors',data:visitors.map(d=>d.visitors),borderColor:'rgba(99,102,241,0.4)',backgroundColor:'rgba(99,102,241,0.05)',fill:true,tension:0.3,pointRadius:1,borderWidth:1},
+      {label:'7-Day Avg',data:sma,borderColor:'#6366f1',borderWidth:2,pointRadius:0,tension:0.3,fill:false}
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10,font:{size:10}}}},scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}
   });
+
+  // Traffic sources list with comparison
+  const curr=sources.current||[];
+  const prior=sources.prior||[];
+  const priorMap={};
+  prior.forEach(i=>{priorMap[i.title]=parseInt(i.value)});
+  const maxSrc=Math.max(...curr.map(i=>parseInt(i.value)),1);
+  const mainSources=['Direct','Searches','Social media','AI','Advertising','Links'];
+  document.getElementById('sourcesList').innerHTML=curr.filter(i=>mainSources.includes(i.title)).map(i=>{
+    const val=parseInt(i.value);
+    const pVal=priorMap[i.title]||0;
+    const delta=pctDelta(val,pVal);
+    const pct=(val/maxSrc*100);
+    const colors={'Direct':'#6366f1','Searches':'#22c55e','Social media':'#f59e0b','AI':'#06b6d4','Advertising':'#a855f7','Links':'#ec4899'};
+    return `<div class="src-row"><div class="src-name">${i.title}</div><div class="src-val">${fmt(val)}</div><div class="src-delta ${delta.cls}">${delta.txt}</div><div class="src-bar-bg"><div class="src-bar-fill" style="width:${pct}%;background:${colors[i.title]||'#6b7280'}"></div></div></div>`;
+  }).join('');
 
   // Top pages
-  document.getElementById('topPagesBody').innerHTML = topPages.map((p,i) => {
-    const shortTitle = (p.title || '').replace(' | Headphonesty','').slice(0,80);
-    return `<tr><td style="color:var(--dim)">${i+1}</td><td><a href="${p.url}" target="_blank">${shortTitle}</a></td><td style="font-weight:600">${fmt(p.visitors)}</td></tr>`;
+  document.getElementById('topPagesBody').innerHTML=topPages.map((p,i)=>{
+    const title=(p.title||'').replace(' | Headphonesty','').slice(0,70);
+    return `<tr><td style="color:var(--dim)">${i+1}</td><td><a href="${p.url}" target="_blank">${title}</a></td><td style="font-weight:600">${fmt(p.visitors)}</td></tr>`;
   }).join('');
 }
 
 // ===== FACEBOOK =====
-async function loadFacebook() {
-  const [daily, formats, hourly, topPosts, mix, fbDaily] = await Promise.all([
+async function loadFacebook(){
+  const [daily,hourly,topPosts,mix,fbDaily]=await Promise.all([
     fetchJSON('/api/daily?days=30'),
-    fetchJSON('/api/formats?days=30'),
     fetchJSON('/api/hourly?days=30'),
-    fetchJSON('/api/top-posts?days=30&limit=10'),
-    fetchJSON('/api/mix?days=30'),
+    fetchJSON('/api/top-posts?days=7'),
+    fetchJSON('/api/mix?days=7'),
     fetchJSON('/api/fb-daily-posts?days=7'),
   ]);
 
-  // Reach chart
-  const ctx3 = document.getElementById('reachChart').getContext('2d');
-  if(reachChart) reachChart.destroy();
-  reachChart = new Chart(ctx3, {
-    type: 'line',
-    data: { labels: daily.map(d=>d.day.slice(5)), datasets: [{ label:'Reach', data: daily.map(d=>d.total_reach), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', fill:true, tension:0.3, pointRadius:2, borderWidth:2 }] },
-    options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}}, x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}} } }
-  });
+  // Reach
+  const ctx3=document.getElementById('reachChart').getContext('2d');
+  if(reachChart)reachChart.destroy();
+  reachChart=new Chart(ctx3,{type:'line',data:{labels:daily.map(d=>d.day.slice(5)),datasets:[{label:'Reach',data:daily.map(d=>d.total_reach),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:0.3,pointRadius:2,borderWidth:2}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}});
 
-  // Engagement chart
-  const ctx4 = document.getElementById('engagementChart').getContext('2d');
-  if(engagementChart) engagementChart.destroy();
-  engagementChart = new Chart(ctx4, {
-    type: 'bar',
-    data: { labels: daily.map(d=>d.day.slice(5)), datasets: [
-      { label:'Shares', data:daily.map(d=>d.total_shares), backgroundColor:'#22c55e', borderRadius:3 },
-      { label:'Comments', data:daily.map(d=>d.total_comments), backgroundColor:'#3b82f6', borderRadius:3 },
-    ] },
-    options: { responsive:true, plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10}}}, scales:{ y:{ticks:{color:'#6b6b80'},grid:{color:'#1e1e2e'}}, x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}} } }
-  });
+  // Engagement
+  const ctx4=document.getElementById('engagementChart').getContext('2d');
+  if(engagementChart)engagementChart.destroy();
+  engagementChart=new Chart(ctx4,{type:'bar',data:{labels:daily.map(d=>d.day.slice(5)),datasets:[{label:'Shares',data:daily.map(d=>d.total_shares),backgroundColor:'#22c55e',borderRadius:3},{label:'Comments',data:daily.map(d=>d.total_comments),backgroundColor:'#3b82f6',borderRadius:3}]},options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10}}},scales:{y:{ticks:{color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}});
 
-  // Content mix
-  const last7 = new Set(daily.slice(-7).map(d=>d.day));
-  const weekMix = {}; let weekTotal = 0;
-  mix.forEach(d => { if(last7.has(d.day)){weekMix[d.post_type]=(weekMix[d.post_type]||0)+d.cnt; weekTotal+=d.cnt;} });
-  document.getElementById('mixBar').innerHTML = Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{const p=(c/weekTotal*100).toFixed(1);return `<div style="width:${p}%;background:${typeColors[t]||'#6b7280'}">${p>8?t+' '+Math.round(p)+'%':''}</div>`;}).join('');
-  document.getElementById('mixLegend').innerHTML = Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<span><span class="dot" style="background:${typeColors[t]||'#6b7280'}"></span>${t} ${(c/weekTotal*100).toFixed(0)}%</span>`).join('');
-  document.getElementById('mixTargets').innerHTML = Object.entries(targets).map(([type,target])=>{const actual=((weekMix[type]||0)/weekTotal*100);const diff=Math.abs(actual-target);const barColor=diff<=5?typeColors[type]:(actual<target?'#ef4444':'#f59e0b');return `<div class="target-row"><div class="target-label">${type}</div><div class="target-bar-bg"><div class="target-bar-fill" style="width:${Math.min(actual,60)}%;background:${barColor}"></div><div class="target-bar-marker" style="left:${target}%"></div></div><div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div></div>`;}).join('');
+  // Mix
+  const weekMix={};let weekTotal=0;
+  mix.forEach(d=>{weekMix[d.post_type]=(weekMix[d.post_type]||0)+d.cnt;weekTotal+=d.cnt});
+  document.getElementById('mixBar').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{const p=(c/weekTotal*100);return `<div style="width:${p}%;background:${typeColors[t]||'#6b7280'}">${p>8?t+' '+Math.round(p)+'%':''}</div>`}).join('');
+  document.getElementById('mixLegend').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<span><span class="dot" style="background:${typeColors[t]||'#6b7280'}"></span>${t} ${(c/weekTotal*100).toFixed(0)}%</span>`).join('');
+  document.getElementById('mixTargets').innerHTML=Object.entries(targets).map(([type,target])=>{const actual=((weekMix[type]||0)/weekTotal*100);const diff=Math.abs(actual-target);const barColor=diff<=5?typeColors[type]:(actual<target?'#ef4444':'#f59e0b');return `<div class="target-row"><div class="target-label">${type}</div><div class="target-bar-bg"><div class="target-bar-fill" style="width:${Math.min(actual,60)}%;background:${barColor}"></div><div class="target-bar-marker" style="left:${target}%"></div></div><div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div></div>`}).join('');
 
-  // Posting slots
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  document.getElementById('slotGrid').innerHTML = fbDaily.slice(-7).map(d => {
-    const dow = new Date(d.day+'T12:00:00').getDay();
-    const pct = Math.min(d.posts / FB_DAILY_TARGET * 100, 100);
-    const color = d.posts >= FB_DAILY_TARGET ? 'var(--green)' : d.posts >= FB_DAILY_TARGET * 0.7 ? 'var(--orange)' : 'var(--red)';
+  // Slots
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  document.getElementById('slotGrid').innerHTML=fbDaily.slice(-7).map(d=>{
+    const dow=new Date(d.day+'T12:00:00').getDay();
+    const pct=Math.min(d.posts/FB_DAILY_TARGET*100,100);
+    const color=d.posts>=FB_DAILY_TARGET?'var(--green)':d.posts>=FB_DAILY_TARGET*0.7?'var(--orange)':'var(--red)';
     return `<div class="slot-day"><div class="day-label">${dayNames[dow]}<br>${d.day.slice(5)}</div><div class="day-count" style="color:${color}">${d.posts}</div><div class="day-bar"><div class="day-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
   }).join('');
 
-  // Heatmap 3 rows
-  const maxReach = Math.max(...hourly.map(h=>h.avg_reach));
-  const rows = [
-    { label:'🌅 0-7', hours: hourly.filter(h=>h.hour_sgt>=0&&h.hour_sgt<8) },
-    { label:'☀️ 8-15', hours: hourly.filter(h=>h.hour_sgt>=8&&h.hour_sgt<16) },
-    { label:'🌙 16-23', hours: hourly.filter(h=>h.hour_sgt>=16&&h.hour_sgt<24) },
-  ];
-  document.getElementById('heatmapContainer').innerHTML = rows.map(row => {
-    const cells = row.hours.map(h => {
-      const i = h.avg_reach/maxReach;
-      const r=Math.round(99+(34-99)*i), g=Math.round(102+(197-102)*i), b=Math.round(241+(94-241)*i);
-      return `<div class="heatmap-cell" style="background:rgba(${r},${g},${b},${0.3+i*0.7})" data-tip="${h.hour_sgt}:00 SGT · ${fmt(h.avg_reach)} avg">${fmt(h.avg_reach)}</div>`;
-    }).join('');
-    const labels = row.hours.map(h=>`<span>${h.hour_sgt}</span>`).join('');
-    return `<div style="margin-bottom:4px"><div style="font-size:9px;color:#6b6b80;margin-bottom:2px">${row.label}</div><div class="heatmap-row">${cells}</div><div class="heatmap-row-labels">${labels}</div></div>`;
+  // Heatmap
+  const maxReach=Math.max(...hourly.map(h=>h.avg_reach));
+  const rows=[{label:'🌅 0-7',hours:hourly.filter(h=>h.hour_sgt>=0&&h.hour_sgt<8)},{label:'☀️ 8-15',hours:hourly.filter(h=>h.hour_sgt>=8&&h.hour_sgt<16)},{label:'🌙 16-23',hours:hourly.filter(h=>h.hour_sgt>=16&&h.hour_sgt<24)}];
+  document.getElementById('heatmapContainer').innerHTML=rows.map(row=>{
+    const cells=row.hours.map(h=>{const i=h.avg_reach/maxReach;const r=Math.round(99+(34-99)*i),g=Math.round(102+(197-102)*i),b=Math.round(241+(94-241)*i);return `<div class="heatmap-cell" style="background:rgba(${r},${g},${b},${0.3+i*0.7})" data-tip="${h.hour_sgt}:00 · ${fmt(h.avg_reach)}">${fmt(h.avg_reach)}</div>`}).join('');
+    const labels=row.hours.map(h=>`<span>${h.hour_sgt}</span>`).join('');
+    return `<div style="margin-bottom:3px"><div style="font-size:8px;color:#6b6b80">${row.label}</div><div class="heatmap-row">${cells}</div><div class="heatmap-row-labels">${labels}</div></div>`;
   }).join('');
 
   // Top posts
-  document.getElementById('topPostsBody').innerHTML = topPosts.map(p => {
-    const fbLink = p.id ? `https://www.facebook.com/${p.id}` : '#';
-    const artLink = p.link_url ? `<a href="${p.link_url}" target="_blank" title="Article">📄</a> ` : '';
-    return `<tr><td style="white-space:nowrap;font-size:11px">${p.day.slice(5)}</td><td><span class="type-badge type-${p.post_type}">${p.post_type}</span></td><td style="font-weight:600">${fmt(p.reach)}</td><td class="hide-mobile">${p.shares}</td><td class="hide-mobile">${p.comments}</td><td class="msg-preview">${p.msg||'—'}</td><td style="white-space:nowrap">${artLink}<a href="${fbLink}" target="_blank">🔗</a></td></tr>`;
+  document.getElementById('topPostsBody').innerHTML=topPosts.map(p=>{
+    const fbLink=p.id?`https://www.facebook.com/${p.id}`:'#';
+    const artLink=p.link_url?`<a href="${p.link_url}" target="_blank">📄</a> `:'';
+    return `<tr><td style="white-space:nowrap;font-size:10px">${p.day.slice(5)}</td><td><span class="type-badge type-${p.post_type}">${p.post_type}</span></td><td style="font-weight:600">${fmt(p.reach)}</td><td class="hide-mobile">${p.shares}</td><td class="hide-mobile">${p.comments}</td><td class="msg-preview">${p.msg||'—'}</td><td style="white-space:nowrap">${artLink}<a href="${fbLink}" target="_blank">🔗</a></td></tr>`;
   }).join('');
 }
 
-// ===== INIT =====
-async function refreshAll() {
-  document.getElementById('refreshBtn').textContent = '⏳ Loading...';
-  try {
-    await Promise.all([loadPulse(), loadScorecards(), loadAlerts(), loadPublishing(), loadTraffic(), loadFacebook()]);
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleString('en-SG', { timeZone: 'Asia/Singapore' });
-  } catch(e) { console.error(e); }
-  document.getElementById('refreshBtn').textContent = '🔄 Refresh';
+async function refreshAll(){
+  document.getElementById('refreshBtn').textContent='⏳';
+  try{
+    await Promise.all([loadScorecards(),loadAlerts(),loadPublishing(),loadTraffic(),loadFacebook()]);
+    document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
+  }catch(e){console.error(e)}
+  document.getElementById('refreshBtn').textContent='🔄';
 }
 
 refreshAll();
-setInterval(loadPulse, 30000); // Refresh real-time every 30s
-setInterval(refreshAll, 5 * 60 * 1000); // Full refresh every 5 min
+setInterval(()=>fetchJSON('/api/realtime').then(d=>{
+  const el=document.querySelector('.pulse-number');
+  if(el)el.textContent=d.visitors;
+  const card=document.querySelector('.pulse-card');
+  if(card){
+    const v=d.visitors;
+    const color=v>=200?'var(--green)':v>=100?'var(--orange)':'var(--red)';
+    card.style.borderColor=color+'30';
+    el.style.color=color;
+  }
+}).catch(()=>{}),30000);
+setInterval(refreshAll,5*60*1000);
 </script>
 </body>
 </html>
