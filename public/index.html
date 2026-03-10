@@ -411,8 +411,8 @@ async function loadPublishing(){
 async function loadTraffic(){
   const [visitors,sources,topPages]=await Promise.all([
     fetchJSON('/api/visitors-daily?days=30'),
-    fetchJSON('/api/traffic-sources?days=7'),
-    fetchJSON('/api/top-pages?days=7&limit=8'),
+    fetchJSON(`/api/traffic-sources?weeksAgo=${weeksAgo}`),
+    fetchJSON(`/api/top-pages?weeksAgo=${weeksAgo}&limit=8`),
   ]);
 
   // Visitors with 7-day SMA
@@ -434,14 +434,17 @@ async function loadTraffic(){
     options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10,font:{size:10}}}},scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}
   });
 
-  // Traffic sources list with comparison
+  // Traffic sources list with period-over-period comparison
   const curr=sources.current||[];
   const prior=sources.prior||[];
   const priorMap={};
   prior.forEach(i=>{priorMap[i.title]=parseInt(i.value)});
   const maxSrc=Math.max(...curr.map(i=>parseInt(i.value)),1);
   const mainSources=['Direct','Searches','Social media','AI','Advertising','Links'];
-  document.getElementById('sourcesList').innerHTML=curr.filter(i=>mainSources.includes(i.title)).map(i=>{
+  const srcDays=sources.daysElapsed||7;
+  const srcDayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const srcCompLabel=sources.isCurrentWeek?`vs prior week (Mon-${srcDayNames[srcDays-1]})`:'vs prior week';
+  document.getElementById('sourcesList').innerHTML=`<div style="font-size:9px;color:var(--dim);margin-bottom:6px">${srcCompLabel}</div>`+curr.filter(i=>mainSources.includes(i.title)).map(i=>{
     const val=parseInt(i.value);
     const pVal=priorMap[i.title]||0;
     const delta=pctDelta(val,pVal);

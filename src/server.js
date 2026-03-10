@@ -167,24 +167,52 @@ app.get('/api/visitors-daily', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Traffic sources: supports ?weeksAgo= for week nav + period-over-period (same elapsed days)
+const trafficSourcesCache = new Map();
+
 app.get('/api/traffic-sources', async (req, res) => {
-  const days = parseInt(req.query.days) || 7;
+  const weeksAgo = parseInt(req.query.weeksAgo) || 0;
+  const cacheKey = `ts_${weeksAgo}`;
+  const cached = trafficSourcesCache.get(cacheKey);
+  const ttl = weeksAgo === 0 ? CACHE_TTL_CURRENT : CACHE_TTL_PAST;
+  if (cached && Date.now() - cached.ts < ttl) {
+    return res.json(cached.data);
+  }
+
   try {
-    // Current period
-    const current = await clickyFetch('traffic-sources', { date: `last-${days}-days` });
-    // Prior period (SGT-aware)
-    const sgt = nowSGT();
-    const priorEnd = new Date(sgt); priorEnd.setUTCDate(priorEnd.getUTCDate() - days);
-    const priorStart = new Date(priorEnd); priorStart.setUTCDate(priorStart.getUTCDate() - days);
-    const prior = await clickyFetch('traffic-sources', { date: `${fmtDate(priorStart)},${fmtDate(priorEnd)}` });
-    res.json({ current: current[0]?.dates?.[0]?.items || [], prior: prior[0]?.dates?.[0]?.items || [] });
+    const wb = getWeekBounds(weeksAgo);
+    const isCurrentWeek = weeksAgo === 0;
+    const daysElapsed = isCurrentWeek ? wb.dayOfWeek : 7;
+    const currentEnd = isCurrentWeek ? fmtDate(nowSGT()) : wb.end;
+
+    // Prior week same window (Mon through Mon+daysElapsed-1)
+    const priorWb = getWeekBounds(weeksAgo + 1);
+    const priorEnd = new Date(priorWb.start + 'T00:00:00Z');
+    priorEnd.setUTCDate(priorEnd.getUTCDate() + daysElapsed - 1);
+    const priorEndStr = fmtDate(priorEnd);
+
+    // Parallel fetch
+    const [current, prior] = await Promise.all([
+      clickyFetch('traffic-sources', { date: `${wb.start},${currentEnd}` }),
+      clickyFetch('traffic-sources', { date: `${priorWb.start},${priorEndStr}` }),
+    ]);
+
+    const result = {
+      current: current[0]?.dates?.[0]?.items || [],
+      prior: prior[0]?.dates?.[0]?.items || [],
+      daysElapsed, isCurrentWeek
+    };
+    trafficSourcesCache.set(cacheKey, { ts: Date.now(), data: result });
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/top-pages', async (req, res) => {
-  const days = parseInt(req.query.days) || 7;
+  const weeksAgo = parseInt(req.query.weeksAgo) || 0;
   try {
-    const data = await clickyFetch('pages', { date: `last-${days}-days`, limit: req.query.limit || 8 });
+    const wb = getWeekBounds(weeksAgo);
+    const currentEnd = weeksAgo === 0 ? fmtDate(nowSGT()) : wb.end;
+    const data = await clickyFetch('pages', { date: `${wb.start},${currentEnd}`, limit: req.query.limit || 8 });
     res.json(data[0]?.dates?.[0]?.items?.map(i => ({ title: i.title, visitors: parseInt(i.value), url: i.url })) || []);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
