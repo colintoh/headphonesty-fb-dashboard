@@ -31,28 +31,41 @@ function getDb() {
   return new Database(DB_PATH, { readonly: true });
 }
 
+// All date logic in SGT (UTC+8)
+function nowSGT() {
+  const utc = new Date();
+  return new Date(utc.getTime() + 8 * 60 * 60 * 1000);
+}
+
+function fmtDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
 function getWeekBounds(weeksAgo = 0) {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
+  const now = nowSGT();
+  const day = now.getUTCDay(); // 0=Sun (use UTC methods since we already offset)
   const diffToMon = day === 0 ? 6 : day - 1;
   const mon = new Date(now);
-  mon.setDate(mon.getDate() - diffToMon - (weeksAgo * 7));
-  mon.setHours(0, 0, 0, 0);
+  mon.setUTCDate(mon.getUTCDate() - diffToMon - (weeksAgo * 7));
+  mon.setUTCHours(0, 0, 0, 0);
   const sun = new Date(mon);
-  sun.setDate(sun.getDate() + 6);
+  sun.setUTCDate(sun.getUTCDate() + 6);
+  const dayOfWeek = diffToMon + 1; // 1=Mon ... 7=Sun
   return {
-    start: mon.toISOString().slice(0, 10),
-    end: sun.toISOString().slice(0, 10),
-    dayOfWeek: diffToMon + 1 // 1=Mon ... 7=Sun
+    start: fmtDate(mon),
+    end: fmtDate(sun),
+    dayOfWeek
   };
 }
 
 function getMonthBounds() {
-  const now = new Date();
-  const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const end = now.toISOString().slice(0, 10);
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const now = nowSGT();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth(); // 0-indexed
+  const start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  const end = fmtDate(now);
+  const dayOfMonth = now.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   return { start, end, dayOfMonth, daysInMonth };
 }
 
@@ -179,11 +192,11 @@ app.get('/api/traffic-sources', async (req, res) => {
   try {
     // Current period
     const current = await clickyFetch('traffic-sources', { date: `last-${days}-days` });
-    // Prior period
-    const now = new Date();
-    const priorEnd = new Date(now); priorEnd.setDate(priorEnd.getDate() - days);
-    const priorStart = new Date(priorEnd); priorStart.setDate(priorStart.getDate() - days);
-    const prior = await clickyFetch('traffic-sources', { date: `${priorStart.toISOString().slice(0,10)},${priorEnd.toISOString().slice(0,10)}` });
+    // Prior period (SGT-aware)
+    const sgt = nowSGT();
+    const priorEnd = new Date(sgt); priorEnd.setUTCDate(priorEnd.getUTCDate() - days);
+    const priorStart = new Date(priorEnd); priorStart.setUTCDate(priorStart.getUTCDate() - days);
+    const prior = await clickyFetch('traffic-sources', { date: `${fmtDate(priorStart)},${fmtDate(priorEnd)}` });
     res.json({ current: current[0]?.dates?.[0]?.items || [], prior: prior[0]?.dates?.[0]?.items || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -208,12 +221,19 @@ app.get('/api/wp-posts', async (req, res) => {
 });
 
 // ===== POSTS.DB =====
+// All DB queries use SGT-aware date cutoff instead of SQLite date('now') which is UTC
+function sgtCutoff(days) {
+  const sgt = nowSGT();
+  sgt.setUTCDate(sgt.getUTCDate() - days);
+  return fmtDate(sgt);
+}
+
 app.get('/api/daily', (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10) ORDER BY day`).all(days));
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10) ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -222,7 +242,7 @@ app.get('/api/formats', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY post_type ORDER BY avg_reach DESC`).all(days));
+    res.json(db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY post_type ORDER BY avg_reach DESC`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -231,7 +251,7 @@ app.get('/api/hourly', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY hour_sgt ORDER BY hour_sgt`).all(days));
+    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY hour_sgt ORDER BY hour_sgt`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -240,7 +260,7 @@ app.get('/api/top-posts', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT id, substr(created_at,1,10) as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE created_at >= date('now','-'||?||' days') ORDER BY reach DESC LIMIT 10`).all(days));
+    res.json(db.prepare(`SELECT id, substr(created_at,1,10) as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE substr(created_at,1,10) >= ? ORDER BY reach DESC LIMIT 10`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -249,7 +269,7 @@ app.get('/api/mix', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, post_type, COUNT(*) as cnt FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10), post_type ORDER BY day`).all(days));
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, post_type, COUNT(*) as cnt FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10), post_type ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -258,7 +278,7 @@ app.get('/api/fb-daily-posts', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts FROM posts WHERE created_at >= date('now','-'||?||' days') GROUP BY substr(created_at,1,10) ORDER BY day`).all(days));
+    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10) ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -287,7 +307,8 @@ app.post('/api/sync-from-url', express.json(), async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', db: fs.existsSync(DB_PATH), timestamp: new Date().toISOString() });
+  const sgt = nowSGT();
+  res.json({ status: 'ok', db: fs.existsSync(DB_PATH), timezone: 'SGT (UTC+8)', serverUTC: new Date().toISOString(), sgt: fmtDate(sgt) + 'T' + sgt.toISOString().slice(11) });
 });
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
