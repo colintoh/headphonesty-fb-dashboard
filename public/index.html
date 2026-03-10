@@ -205,9 +205,9 @@
     <div style="margin-top:10px" id="mixTargets"></div>
   </div>
   <div class="card">
-    <h3>Posting Slots (7d)</h3>
-    <div class="slot-grid" id="slotGrid"></div>
-    <div style="margin-top:6px;font-size:9px;color:var(--dim)">Target: 16 posts/day</div>
+    <h3>Posting Slots (3 Weeks)</h3>
+    <div id="slotGrid"></div>
+    <div style="margin-top:6px;font-size:9px;color:var(--dim)">Target: 16 posts/day · <span style="color:var(--green)">●</span> ≥16 <span style="color:var(--orange)">●</span> ≥11 <span style="color:var(--red)">●</span> &lt;11</div>
   </div>
   <div class="card">
     <h3>🔥 Posting Heatmap (SGT)</h3>
@@ -470,12 +470,17 @@ async function loadTraffic(){
 // ===== FACEBOOK =====
 async function loadFacebook(){
   const wp=weekParams();
-  const [daily,hourly,topPosts,mix,fbDaily]=await Promise.all([
+  // Slots need 3 weeks of data (selected week + 2 prior)
+  const selWeek=getSelectedWeek();
+  const slot2ago=new Date(new Date(selWeek.start+'T12:00:00Z').getTime()-14*86400000);
+  const slotsStart=slot2ago.toISOString().slice(0,10);
+  const [daily,hourly,topPosts,mix,fbDaily,fbSlots3w]=await Promise.all([
     fetchJSON('/api/daily?days=30'),
     fetchJSON('/api/hourly?days=30'),
     fetchJSON(`/api/top-posts?${wp}`),
     fetchJSON(`/api/mix?${wp}`),
     fetchJSON(`/api/fb-daily-posts?${wp}`),
+    fetchJSON(`/api/fb-daily-posts?start=${slotsStart}&end=${selWeek.end}`),
   ]);
 
   // Reach
@@ -495,14 +500,48 @@ async function loadFacebook(){
   document.getElementById('mixLegend').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<span><span class="dot" style="background:${typeColors[t]||'#6b7280'}"></span>${t} ${(c/weekTotal*100).toFixed(0)}%</span>`).join('');
   document.getElementById('mixTargets').innerHTML=Object.entries(targets).map(([type,target])=>{const actual=((weekMix[type]||0)/weekTotal*100);const diff=Math.abs(actual-target);const barColor=diff<=5?typeColors[type]:(actual<target?'#ef4444':'#f59e0b');return `<div class="target-row"><div class="target-label">${type}</div><div class="target-bar-bg"><div class="target-bar-fill" style="width:${Math.min(actual,60)}%;background:${barColor}"></div><div class="target-bar-marker" style="left:${target}%"></div></div><div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div></div>`}).join('');
 
-  // Slots
+  // Slots — 3 weeks (selected + 2 prior), grouped by week rows
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  document.getElementById('slotGrid').innerHTML=fbDaily.slice(-7).map(d=>{
-    const dow=new Date(d.day+'T12:00:00').getDay();
-    const pct=Math.min(d.posts/FB_DAILY_TARGET*100,100);
-    const color=d.posts>=FB_DAILY_TARGET?'var(--green)':d.posts>=FB_DAILY_TARGET*0.7?'var(--orange)':'var(--red)';
-    return `<div class="slot-day"><div class="day-label">${dayNames[dow]}<br>${d.day.slice(5)}</div><div class="day-count" style="color:${color}">${d.posts}</div><div class="day-bar"><div class="day-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
-  }).join('');
+  const slotsData=fbSlots3w||[];
+  // Group into weeks (Mon-Sun)
+  const slotWeeks=[];
+  const sw=getSelectedWeek();
+  for(let wk=2;wk>=0;wk--){
+    const wkStart=new Date(new Date(sw.start+'T12:00:00Z').getTime()-wk*7*86400000);
+    const wkEnd=new Date(wkStart.getTime()+6*86400000);
+    const startStr=wkStart.toISOString().slice(0,10);
+    const endStr=wkEnd.toISOString().slice(0,10);
+    const todayStr=fmtDateSGT(nowSGT());
+    const days=[];
+    for(let i=0;i<7;i++){
+      const dt=new Date(wkStart.getTime()+i*86400000);
+      const dStr=dt.toISOString().slice(0,10);
+      const match=slotsData.find(d=>d.day===dStr);
+      const isFuture=dStr>todayStr;
+      days.push({day:dStr,posts:match?match.posts:0,future:isFuture});
+    }
+    const isCurrentWk=wk===0;
+    const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const label=isCurrentWk?'This week':`${mo[wkStart.getUTCMonth()]} ${wkStart.getUTCDate()}`;
+    slotWeeks.push({days,label,isCurrent:isCurrentWk});
+  }
+  let slotHtml='<div style="display:grid;grid-template-columns:50px repeat(7,1fr);gap:4px;align-items:center">';
+  // Header row
+  slotHtml+='<div></div>';
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d=>{slotHtml+=`<div style="text-align:center;font-size:8px;color:var(--dim);font-weight:600">${d}</div>`});
+  slotWeeks.forEach(wk=>{
+    slotHtml+=`<div style="font-size:9px;color:${wk.isCurrent?'var(--accent)':'var(--dim)'};font-weight:${wk.isCurrent?'600':'400'};white-space:nowrap">${wk.label}</div>`;
+    wk.days.forEach(d=>{
+      if(d.future){
+        slotHtml+=`<div style="text-align:center;font-size:12px;color:#2a2a2a">—</div>`;
+      }else{
+        const color=d.posts>=FB_DAILY_TARGET?'var(--green)':d.posts>=FB_DAILY_TARGET*0.7?'var(--orange)':'var(--red)';
+        slotHtml+=`<div style="text-align:center;font-size:14px;font-weight:700;color:${color}">${d.posts}</div>`;
+      }
+    });
+  });
+  slotHtml+='</div>';
+  document.getElementById('slotGrid').innerHTML=slotHtml;
 
   // Heatmap
   const maxReach=Math.max(...hourly.map(h=>h.avg_reach));
