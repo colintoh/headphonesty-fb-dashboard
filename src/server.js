@@ -221,19 +221,23 @@ app.get('/api/wp-posts', async (req, res) => {
 });
 
 // ===== POSTS.DB =====
-// All DB queries use SGT-aware date cutoff instead of SQLite date('now') which is UTC
+// All DB queries convert created_at (UTC+0000) to SGT date before grouping/filtering
+// created_at format: "2026-03-09T21:35:24+0000" — hour is at position 11-12
+// SGT = UTC+8, so if hour >= 16, the SGT date is next day
 function sgtCutoff(days) {
   const sgt = nowSGT();
   sgt.setUTCDate(sgt.getUTCDate() - days);
   return fmtDate(sgt);
 }
 
+const SGT_DAY_EXPR = `CASE WHEN CAST(substr(created_at,12,2) AS INTEGER) >= 16 THEN date(substr(created_at,1,10), '+1 day') ELSE substr(created_at,1,10) END`;
+
 app.get('/api/daily', (req, res) => {
   const days = parseInt(req.query.days) || 30;
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10) ORDER BY day`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT ${SGT_DAY_EXPR} as day, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE ${SGT_DAY_EXPR} >= ? GROUP BY day ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -242,7 +246,7 @@ app.get('/api/formats', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY post_type ORDER BY avg_reach DESC`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE ${SGT_DAY_EXPR} >= ? GROUP BY post_type ORDER BY avg_reach DESC`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -251,7 +255,7 @@ app.get('/api/hourly', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY hour_sgt ORDER BY hour_sgt`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE ${SGT_DAY_EXPR} >= ? GROUP BY hour_sgt ORDER BY hour_sgt`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -260,7 +264,7 @@ app.get('/api/top-posts', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT id, substr(created_at,1,10) as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE substr(created_at,1,10) >= ? ORDER BY reach DESC LIMIT 10`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT id, ${SGT_DAY_EXPR} as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE ${SGT_DAY_EXPR} >= ? ORDER BY reach DESC LIMIT 10`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -269,7 +273,7 @@ app.get('/api/mix', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, post_type, COUNT(*) as cnt FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10), post_type ORDER BY day`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT ${SGT_DAY_EXPR} as day, post_type, COUNT(*) as cnt FROM posts WHERE ${SGT_DAY_EXPR} >= ? GROUP BY day, post_type ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
@@ -278,7 +282,7 @@ app.get('/api/fb-daily-posts', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT substr(created_at,1,10) as day, COUNT(*) as posts FROM posts WHERE substr(created_at,1,10) >= ? GROUP BY substr(created_at,1,10) ORDER BY day`).all(sgtCutoff(days)));
+    res.json(db.prepare(`SELECT ${SGT_DAY_EXPR} as day, COUNT(*) as posts FROM posts WHERE ${SGT_DAY_EXPR} >= ? GROUP BY day ORDER BY day`).all(sgtCutoff(days)));
   } finally { db.close(); }
 });
 
