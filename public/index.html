@@ -23,6 +23,8 @@
   .week-label .current-badge{font-size:9px;color:var(--accent);font-weight:400;margin-left:4px}
   .refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px}
   .refresh-btn:hover{border-color:var(--accent);color:var(--text)}
+  .loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,15,0.7);display:flex;align-items:center;justify-content:center;z-index:100;font-size:16px;color:var(--accent);display:none}
+  .loading-overlay.show{display:flex}
 
   /* Scorecard row with real-time */
   .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;min-height:110px}
@@ -128,6 +130,7 @@
 </head>
 <body>
 
+<div class="loading-overlay" id="loadingOverlay">⏳ Loading week data...</div>
 <div class="header">
   <div>
     <h1>📊 <span>Headphonesty</span> Ops</h1>
@@ -244,9 +247,17 @@ function changeWeek(dir){
   weeksAgo+=dir;
   if(weeksAgo<0)weeksAgo=0;
   if(weeksAgo>MAX_WEEKS_BACK)weeksAgo=MAX_WEEKS_BACK;
+  updateNavButtons();
+  // Show loading overlay and reload
+  document.getElementById('loadingOverlay').classList.add('show');
+  refreshAll().finally(()=>{
+    document.getElementById('loadingOverlay').classList.remove('show');
+  });
+}
+
+function updateNavButtons(){
   document.getElementById('btnNext').disabled=weeksAgo===0;
   document.getElementById('btnPrev').disabled=weeksAgo>=MAX_WEEKS_BACK;
-  refreshAll();
 }
 
 // ===== PULSE + SCORECARDS =====
