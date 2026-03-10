@@ -307,27 +307,43 @@ async function loadScorecards(){
   }catch(e){console.error('Scorecards:',e)}
 }
 
+// ===== WEEK RANGE HELPERS =====
+// Compute week start/end for current weeksAgo offset
+function getSelectedWeek(){
+  const now=new Date();
+  const sgt=new Date(now.getTime()+8*60*60*1000);
+  const day=sgt.getUTCDay(); // 0=Sun
+  const diffToMon=day===0?6:day-1;
+  const mon=new Date(sgt);
+  mon.setUTCDate(mon.getUTCDate()-diffToMon-weeksAgo*7);
+  const sun=new Date(mon);
+  sun.setUTCDate(sun.getUTCDate()+6);
+  const start=mon.toISOString().slice(0,10);
+  const end=sun.toISOString().slice(0,10);
+  return {start,end};
+}
+
+function weekParams(){const w=getSelectedWeek();return `start=${w.start}&end=${w.end}`;}
+
 // ===== ALERTS =====
 async function loadAlerts(){
+  const w=getSelectedWeek();
   const [wp,fbDaily]=await Promise.all([
-    fetchJSON('/api/wp-posts?days=7').catch(()=>({posts:[]})),
-    fetchJSON('/api/fb-daily-posts?days=7').catch(()=>[]),
+    fetchJSON(`/api/wp-posts?days=7`).catch(()=>({posts:[]})),
+    fetchJSON(`/api/fb-daily-posts?${weekParams()}`).catch(()=>[]),
   ]);
   const alerts=[];
   const now=new Date();
-  const dow=(now.getDay()||7); // 1=Mon..7=Sun
+  const dow=(now.getDay()||7);
   const expected=Math.round(15/7*dow);
   const art=wp.posts?.length||0;
-  if(art<expected*0.7) alerts.push({type:'danger',msg:`⚠️ Publishing behind: ${art}/15 articles (expected ~${expected} by day ${dow})`});
-  else if(art<expected) alerts.push({type:'warn',msg:`📝 Publishing slightly behind: ${art}/15 articles`});
+  if(weeksAgo===0){
+    if(art<expected*0.7) alerts.push({type:'danger',msg:`⚠️ Publishing behind: ${art}/15 articles (expected ~${expected} by day ${dow})`});
+    else if(art<expected) alerts.push({type:'warn',msg:`📝 Publishing slightly behind: ${art}/15 articles`});
+  }
   const lowDays=fbDaily.filter(d=>d.posts<FB_DAILY_TARGET*0.5);
   if(lowDays.length) alerts.push({type:'warn',msg:`📱 ${lowDays.length} day(s) below 8 FB posts: ${lowDays.map(d=>d.day.slice(5)).join(', ')}`});
-  if(wp.posts?.length>=3){
-    const early=wp.posts.filter(p=>{const d=new Date(p.date).getDay();return d>=1&&d<=3}).length;
-    const late=wp.posts.filter(p=>{const d=new Date(p.date).getDay();return d>=4&&d<=5}).length;
-    if(late>early*1.5&&late>3) alerts.push({type:'warn',msg:`📅 Backloaded: ${late} articles Thu-Fri vs ${early} Mon-Wed`});
-  }
-  if(!alerts.length) alerts.push({type:'ok',msg:'✅ On track this week'});
+  if(!alerts.length) alerts.push({type:'ok',msg:'✅ On track'});
   document.getElementById('alerts').innerHTML=alerts.map(a=>`<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
 }
 
@@ -443,12 +459,13 @@ async function loadTraffic(){
 
 // ===== FACEBOOK =====
 async function loadFacebook(){
+  const wp=weekParams();
   const [daily,hourly,topPosts,mix,fbDaily]=await Promise.all([
     fetchJSON('/api/daily?days=30'),
     fetchJSON('/api/hourly?days=30'),
-    fetchJSON('/api/top-posts?days=7'),
-    fetchJSON('/api/mix?days=7'),
-    fetchJSON('/api/fb-daily-posts?days=7'),
+    fetchJSON(`/api/top-posts?${wp}`),
+    fetchJSON(`/api/mix?${wp}`),
+    fetchJSON(`/api/fb-daily-posts?${wp}`),
   ]);
 
   // Reach
