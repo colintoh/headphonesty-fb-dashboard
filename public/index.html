@@ -527,7 +527,7 @@ function showFBCalPopup(event,day){
       <th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">POST</th>
     </tr></thead><tbody>`;
   posts.forEach(p=>{
-    const fbLink=p.id?`https://www.facebook.com/${p.id}`:'#';
+    const fbLink=p.id?`https://www.facebook.com/${p.id.replace('_','/posts/')}`:'#';
     const preview=(p.msg||'—').slice(0,60)+(p.msg&&p.msg.length>60?'…':'');
     tableHtml+=`<tr style="border-bottom:1px solid #1e1e2e">
       <td style="padding:3px 4px;white-space:nowrap;color:var(--dim)">${p.time_sgt}</td>
@@ -709,7 +709,7 @@ async function loadFacebook(){
 
   // Top posts
   document.getElementById('topPostsBody').innerHTML=topPosts.map(p=>{
-    const fbLink=p.id?`https://www.facebook.com/${p.id}`:'#';
+    const fbLink=p.id?`https://www.facebook.com/${p.id.replace('_','/posts/')}`:'#';
     const artLink=p.link_url?`<a href="${p.link_url}" target="_blank">📄</a> `:'';
     return `<tr><td style="white-space:nowrap;font-size:10px">${p.day.slice(5)}</td><td><span class="type-badge type-${p.post_type}">${p.post_type}</span></td><td style="font-weight:600">${fmt(p.reach)}</td><td class="hide-mobile">${p.shares}</td><td class="hide-mobile">${p.comments}</td><td class="msg-preview">${p.msg||'—'}</td><td style="white-space:nowrap">${artLink}<a href="${fbLink}" target="_blank">🔗</a></td></tr>`;
   }).join('');
