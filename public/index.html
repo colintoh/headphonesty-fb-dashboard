@@ -435,8 +435,8 @@ async function loadTraffic(){
   visitorsChart=new Chart(ctx1,{
     type:'line',
     data:{labels:visitors.map(d=>d.date.slice(5)),datasets:[
-      {label:'Visitors',data:visitors.map(d=>d.visitors),borderColor:'rgba(99,102,241,0.4)',backgroundColor:'rgba(99,102,241,0.05)',fill:true,tension:0.3,pointRadius:1,borderWidth:1},
-      {label:'7-Day Avg',data:sma,borderColor:'#6366f1',borderWidth:2,pointRadius:0,tension:0.3,fill:false}
+      {label:'Visitors',data:visitors.map(d=>d.visitors),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:0.3,pointRadius:2,borderWidth:2},
+      {label:'7-Day Avg',data:sma,borderColor:'rgba(99,102,241,0.35)',borderWidth:1.5,pointRadius:0,tension:0.3,borderDash:[4,3],fill:false}
     ]},
     options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10,font:{size:10}}}},scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}
   });
