@@ -20,7 +20,7 @@
   .refresh-btn{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px}
 
   /* Scorecard row with real-time */
-  .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+  .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;min-height:110px}
   .pulse-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px}
   .pulse-number{font-size:44px;font-weight:800;letter-spacing:-2px;line-height:1}
   .pulse-label{font-size:10px;color:var(--dim);margin-top:4px}
@@ -44,7 +44,7 @@
   /* Calendar grid (Mon-Sun columns, weeks as rows) */
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
   .cal-header{font-size:9px;color:var(--dim);text-align:center;padding:2px 0;font-weight:600}
-  .cal-cell{aspect-ratio:1;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.8);cursor:default;position:relative;min-height:28px}
+  .cal-cell{border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.8);cursor:default;position:relative;height:28px}
   .cal-cell:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:4px 8px;border-radius:4px;font-size:10px;white-space:nowrap;z-index:10}
   .cal-legend{display:flex;gap:4px;margin-top:6px;align-items:center;font-size:10px;color:var(--dim)}
   .cal-legend .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
@@ -136,7 +136,13 @@
 </div>
 
 <!-- Pulse + Scorecards -->
-<div class="sc-row" id="scRow"></div>
+<div class="sc-row" id="scRow">
+  <div class="pulse-card" style="border-color:#1e1e2e"><div class="pulse-number" style="color:var(--dim)">—</div><div class="pulse-label">visitors now</div></div>
+  <div class="sc"><div class="sc-label">Visitors</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc"><div class="sc-label">FB Reach</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc"><div class="sc-label">FB Clicks</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc"><div class="sc-label">Articles</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+</div>
 
 <!-- Alerts -->
 <div id="alerts"></div>
