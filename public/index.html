@@ -125,7 +125,7 @@
     .msg-preview{max-width:130px}
     .sc .sc-value{font-size:18px}
     .cal-cell{min-height:22px;font-size:9px}
-    #fbCalPopup{left:0!important;right:0!important;bottom:0!important;top:auto!important;max-width:100%!important;max-height:60vh!important;border-radius:14px 14px 0 0!important;width:100%!important}
+    #fbCalPopup,#wpCalPopup{left:0!important;right:0!important;bottom:0!important;top:auto!important;max-width:100%!important;max-height:60vh!important;border-radius:14px 14px 0 0!important;width:100%!important}
   }
 </style>
 </head>
@@ -206,6 +206,16 @@
   </div>
 </div>
 <!-- Post detail popup -->
+<!-- WP article popup -->
+<div id="wpCalPopupOverlay" onclick="document.getElementById('wpCalPopup').style.display='none';this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199"></div>
+<div id="wpCalPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:460px;max-height:60vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div id="wpCalPopupTitle" style="font-size:13px;font-weight:700"></div>
+    <button onclick="document.getElementById('wpCalPopup').style.display='none';document.getElementById('wpCalPopupOverlay').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
+  </div>
+  <div id="wpCalPopupList"></div>
+</div>
+
 <div id="fbCalPopupOverlay" onclick="document.getElementById('fbCalPopup').style.display='none';this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199"></div>
 <div id="fbCalPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:500px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -379,7 +389,15 @@ async function loadPublishing(){
   const wp=await fetchJSON('/api/wp-posts?days=60').catch(()=>({posts:[]}));
   const posts=wp.posts||[];
   const byDay={};
-  posts.forEach(p=>{const d=p.date.slice(0,10);byDay[d]=(byDay[d]||0)+1});
+  const wpByDay={};
+  posts.forEach(p=>{
+    const d=p.date.slice(0,10);
+    byDay[d]=(byDay[d]||0)+1;
+    if(!wpByDay[d])wpByDay[d]=[];
+    wpByDay[d].push({title:(p.title?.rendered||'').replace(/&#8217;/g,"'").replace(/&#8216;/g,"'").replace(/&amp;/g,'&'),link:p.link,date:p.date});
+  });
+
+  wpCalCache=wpByDay;
 
   // Build calendar: rows=weeks, columns=Mon-Sun (all in SGT)
   const now=nowSGT();
@@ -411,7 +429,8 @@ async function loadPublishing(){
     week.forEach(d=>{
       const bg=cellColor(d.count,d.future);
       const border=d.future?'border:1px dashed #2a2a2a':'';
-      html+=`<div class="cal-cell" style="background:${bg};${border}" data-tip="${d.day}: ${d.count} article${d.count!==1?'s':''}">${d.future?'':d.count||''}</div>`;
+      const clickable=!d.future&&d.count>0?`cursor:pointer`:'';
+      html+=`<div class="cal-cell" style="background:${bg};${border};${clickable}" data-day="${d.day}" onclick="showWPCalPopup(event,'${d.day}')" data-tip="${d.day}: ${d.count} article${d.count!==1?'s':''}">${d.future?'':d.count||''}</div>`;
     });
   });
   html+='</div>';
@@ -434,6 +453,33 @@ async function loadPublishing(){
     const color=isLow?'var(--orange)':'var(--green)';
     return `<div class="dow-row"><div class="dow-label">${name}</div><div class="dow-bar-bg"><div class="dow-bar-fill" style="width:${pct}%;background:${color}">${avg.toFixed(1)}</div></div></div>`;
   }).join('');
+}
+
+// ===== WP CALENDAR POPUP =====
+let wpCalCache={};
+function showWPCalPopup(event,day){
+  const articles=wpCalCache[day];
+  if(!articles||!articles.length)return;
+  const popup=document.getElementById('wpCalPopup');
+  document.getElementById('wpCalPopupTitle').textContent=`📝 ${day} · ${articles.length} article${articles.length!==1?'s':''}`;
+  let html='';
+  articles.forEach((a,i)=>{
+    const time=a.date.slice(11,16);
+    html+=`<div style="padding:8px 0;${i?'border-top:1px solid #1e1e2e':''}">
+      <a href="${a.link}" target="_blank" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;line-height:1.4">${a.title}</a>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px">${time} SGT</div>
+    </div>`;
+  });
+  document.getElementById('wpCalPopupList').innerHTML=html;
+  popup.style.display='block';
+  document.getElementById('wpCalPopupOverlay').style.display='block';
+  const isMobile=window.innerWidth<=900;
+  if(!isMobile){
+    const x=Math.min(event.clientX,window.innerWidth-480);
+    const y=Math.min(event.clientY+10,window.innerHeight-300);
+    popup.style.left=x+'px';
+    popup.style.top=y+'px';
+  }
 }
 
 // ===== FB DISTRIBUTION CALENDAR =====
