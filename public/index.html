@@ -256,6 +256,44 @@
   </div>
 </div>
 
+<!-- lil zucc Insights Widget -->
+<div id="zuccBubble" onclick="toggleInsights()" style="position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 20px rgba(99,102,241,0.4);z-index:300;transition:transform 0.2s">
+  🧠
+  <div id="zuccBadge" style="display:none;position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:2px solid var(--bg);font-size:8px;color:white;display:none;align-items:center;justify-content:center"></div>
+</div>
+<div id="zuccPanel" style="display:none;position:fixed;bottom:80px;right:20px;width:380px;max-height:70vh;background:#12121a;border:1px solid #2e2e4e;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,0.6);z-index:300;overflow:hidden;flex-direction:column">
+  <div style="padding:12px 16px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:18px">🧠</span>
+      <div>
+        <div style="font-size:13px;font-weight:700">lil zucc</div>
+        <div style="font-size:9px;color:var(--dim)" id="zuccStatus">FB Performance Analyst</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button onclick="loadInsights(true)" id="zuccRefresh" style="background:none;border:1px solid #2e2e4e;color:var(--dim);padding:3px 8px;border-radius:5px;cursor:pointer;font-size:11px" title="Refresh analysis">🔄</button>
+      <button onclick="toggleInsights()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
+    </div>
+  </div>
+  <div id="zuccBody" style="padding:14px 16px;overflow-y:auto;max-height:calc(70vh - 50px);font-size:12px;line-height:1.6;color:var(--text)">
+    <div id="zuccLoading" style="display:flex;align-items:center;justify-content:center;padding:40px 0;flex-direction:column;gap:10px">
+      <div style="width:32px;height:32px;border:3px solid #2e2e4e;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+      <div style="font-size:11px;color:var(--dim)">Analyzing dashboard data...</div>
+    </div>
+    <div id="zuccContent" style="display:none"></div>
+    <div id="zuccTime" style="display:none;margin-top:10px;padding-top:8px;border-top:1px solid #1e1e2e;font-size:9px;color:var(--dim)"></div>
+  </div>
+</div>
+<style>
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #zuccBubble:hover{transform:scale(1.1)}
+  #zuccPanel{animation:slideUp 0.2s ease-out}
+  @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  @media(max-width:900px){
+    #zuccPanel{left:10px!important;right:10px!important;width:auto!important;bottom:76px!important;max-height:60vh!important}
+  }
+</style>
+
 <script>
 const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b',reel:'#06b6d4',recycled:'#f97316',other:'#6b7280'};
 const targets={fresh:42,meme:22,story:17,status:17,reel:2};
@@ -769,6 +807,82 @@ async function refreshAll(){
   }catch(e){console.error(e)}
   document.getElementById('refreshBtn').textContent='🔄';
 }
+
+// ===== LIL ZUCC INSIGHTS WIDGET =====
+let zuccOpen = false;
+let zuccLoaded = false;
+let zuccLastSeen = parseInt(localStorage.getItem('zucc_last_seen') || '0');
+
+function toggleInsights() {
+  zuccOpen = !zuccOpen;
+  const panel = document.getElementById('zuccPanel');
+  panel.style.display = zuccOpen ? 'flex' : 'none';
+  if (zuccOpen && !zuccLoaded) loadInsights(false);
+  if (zuccOpen) {
+    // Mark as seen
+    zuccLastSeen = Date.now();
+    localStorage.setItem('zucc_last_seen', zuccLastSeen);
+    document.getElementById('zuccBadge').style.display = 'none';
+  }
+}
+
+async function loadInsights(forceRefresh) {
+  const loading = document.getElementById('zuccLoading');
+  const content = document.getElementById('zuccContent');
+  const timeEl = document.getElementById('zuccTime');
+  const refreshBtn = document.getElementById('zuccRefresh');
+
+  loading.style.display = 'flex';
+  content.style.display = 'none';
+  timeEl.style.display = 'none';
+  refreshBtn.textContent = '⏳';
+
+  try {
+    const url = forceRefresh ? '/api/insights?refresh=true' : '/api/insights';
+    const data = await fetchJSON(url);
+
+    if (data.status === 'generating') {
+      // Poll until ready
+      setTimeout(() => loadInsights(false), 3000);
+      return;
+    }
+
+    if (data.error) {
+      content.innerHTML = `<div style="color:var(--red);font-size:11px">⚠️ ${data.error}</div>`;
+    } else {
+      content.innerHTML = data.analysis;
+      const genTime = data.generatedAt ? new Date(data.generatedAt) : new Date();
+      timeEl.innerHTML = `${data.cached ? '📋 Cached' : '✨ Fresh'} · Generated ${genTime.toLocaleString('en-SG', { timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit' })} SGT`;
+      timeEl.style.display = 'block';
+
+      // Show notification badge if panel is closed and analysis is newer than last seen
+      if (!zuccOpen && genTime.getTime() > zuccLastSeen) {
+        document.getElementById('zuccBadge').style.display = 'flex';
+      }
+    }
+
+    content.style.display = 'block';
+    loading.style.display = 'none';
+    zuccLoaded = true;
+  } catch (e) {
+    content.innerHTML = `<div style="color:var(--red);font-size:11px">⚠️ Failed to load insights: ${e.message}</div>`;
+    content.style.display = 'block';
+    loading.style.display = 'none';
+  }
+  refreshBtn.textContent = '🔄';
+}
+
+// Preload insights on page load (uses cache, won't trigger generation if stale — only shows badge)
+setTimeout(() => {
+  fetch('/api/insights').then(r => r.json()).then(data => {
+    if (data.status === 'ok' && data.generatedAt) {
+      const genTime = new Date(data.generatedAt).getTime();
+      if (genTime > zuccLastSeen) {
+        document.getElementById('zuccBadge').style.display = 'flex';
+      }
+    }
+  }).catch(() => {});
+}, 2000);
 
 refreshAll();
 setInterval(()=>fetchJSON('/api/realtime').then(d=>{

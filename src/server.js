@@ -344,6 +344,161 @@ app.post('/api/sync-from-url', express.json(), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ===== INSIGHTS (AI Advisor Panel) =====
+const Anthropic = require('@anthropic-ai/sdk');
+let insightsCache = { ts: 0, data: null, generating: false };
+const INSIGHTS_TTL = 60 * 60 * 1000; // 1 hour
+
+async function gatherDashboardContext() {
+  const db = getDb();
+  if (!db) return 'Database not available.';
+
+  try {
+    const wb = getWeekBounds(0);
+    const priorWb = getWeekBounds(1);
+    const currentEnd = fmtDate(nowSGT());
+    const daysElapsed = wb.dayOfWeek;
+
+    // Prior week same window
+    const priorEnd = new Date(priorWb.start + 'T00:00:00Z');
+    priorEnd.setUTCDate(priorEnd.getUTCDate() + daysElapsed - 1);
+    const priorEndStr = fmtDate(priorEnd);
+
+    // Parallel: Clicky + Labby + WP + DB queries
+    const [vData, pvData, fbData, pfData, wpPosts] = await Promise.all([
+      clickyFetch('visitors', { date: `${wb.start},${currentEnd}` }),
+      clickyFetch('visitors', { date: `${priorWb.start},${priorEndStr}` }),
+      fetchLabby(wb.start, currentEnd),
+      fetchLabby(priorWb.start, priorEndStr),
+      fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`).then(r => r.json()).catch(() => []),
+    ]);
+
+    const visitors = parseInt(vData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+    const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+    const fbReach = fbData.totalReach || 0;
+    const fbClicks = fbData.totalFacebookLinkClicks || 0;
+    const priorReach = pfData.totalReach || 0;
+    const priorClicks = pfData.totalFacebookLinkClicks || 0;
+    const articlesCount = Array.isArray(wpPosts) ? wpPosts.length : 0;
+
+    // DB queries
+    const topPosts = db.prepare(`SELECT id, ${SGT_DAY_EXPR} as day, post_type, reach, shares, comments, link_url, substr(message,1,120) as msg FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ORDER BY reach DESC LIMIT 10`).all(wb.start, wb.end);
+    const mix = db.prepare(`SELECT post_type, COUNT(*) as cnt, ROUND(AVG(reach)) as avg_reach FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? GROUP BY post_type ORDER BY avg_reach DESC`).all(wb.start, currentEnd);
+    const dailyPosts = db.prepare(`SELECT ${SGT_DAY_EXPR} as day, COUNT(*) as posts FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? GROUP BY day ORDER BY day`).all(wb.start, currentEnd);
+
+    // 30-day trends
+    const sgt30 = new Date(nowSGT()); sgt30.setUTCDate(sgt30.getUTCDate() - 30);
+    const daily30 = db.prepare(`SELECT ${SGT_DAY_EXPR} as day, COUNT(*) as posts, SUM(reach) as total_reach, SUM(shares) as total_shares, SUM(comments) as total_comments FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? GROUP BY day ORDER BY day`).all(fmtDate(sgt30), currentEnd);
+
+    db.close();
+
+    // Format context
+    const visitorsProj = Math.round(visitors / daysElapsed * 7);
+    const reachProj = Math.round(fbReach / daysElapsed * 7);
+    const clicksProj = Math.round(fbClicks / daysElapsed * 7);
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    let ctx = `## Current Week (${wb.start} to ${wb.end}) — Day ${daysElapsed} (${dayNames[daysElapsed - 1]})\n\n`;
+    ctx += `### Scorecards (vs same days prior week)\n`;
+    ctx += `- Visitors: ${visitors.toLocaleString()} (proj: ${visitorsProj.toLocaleString()}/wk) | Target: ${WEEKLY_TARGETS.visitors.toLocaleString()} | Prior: ${priorVisitors.toLocaleString()} (${priorVisitors ? ((visitors - priorVisitors) / priorVisitors * 100).toFixed(1) : '—'}%)\n`;
+    ctx += `- FB Reach: ${fbReach.toLocaleString()} (proj: ${reachProj.toLocaleString()}/wk) | Target: ${WEEKLY_TARGETS.fb_reach.toLocaleString()} | Prior: ${priorReach.toLocaleString()} (${priorReach ? ((fbReach - priorReach) / priorReach * 100).toFixed(1) : '—'}%)\n`;
+    ctx += `- FB Clicks: ${fbClicks.toLocaleString()} (proj: ${clicksProj.toLocaleString()}/wk) | Target: ${WEEKLY_TARGETS.fb_clicks.toLocaleString()} | Prior: ${priorClicks.toLocaleString()} (${priorClicks ? ((fbClicks - priorClicks) / priorClicks * 100).toFixed(1) : '—'}%)\n`;
+    ctx += `- Articles Published: ${articlesCount} / 15 target\n\n`;
+
+    ctx += `### Content Mix This Week\n`;
+    const totalMix = mix.reduce((s, m) => s + m.cnt, 0);
+    mix.forEach(m => { ctx += `- ${m.post_type}: ${m.cnt} posts (${(m.cnt / totalMix * 100).toFixed(0)}%) — avg reach ${m.avg_reach}\n`; });
+    ctx += `\n`;
+
+    ctx += `### Daily FB Posting (this week)\n`;
+    dailyPosts.forEach(d => { ctx += `- ${d.day}: ${d.posts} posts ${d.posts >= 16 ? '✅' : d.posts >= 11 ? '⚠️' : '🔴'}\n`; });
+    ctx += `Target: 16 posts/day\n\n`;
+
+    ctx += `### Top 10 Posts This Week (by reach)\n`;
+    topPosts.forEach((p, i) => { ctx += `${i + 1}. [${p.post_type}] reach=${p.reach} shares=${p.shares} comments=${p.comments} — "${(p.msg || '').slice(0, 80)}"\n`; });
+    ctx += `\n`;
+
+    ctx += `### 30-Day Trends (last 7 days vs prior 7)\n`;
+    if (daily30.length >= 14) {
+      const last7 = daily30.slice(-7);
+      const prior7 = daily30.slice(-14, -7);
+      const l7reach = last7.reduce((s, d) => s + (d.total_reach || 0), 0);
+      const p7reach = prior7.reduce((s, d) => s + (d.total_reach || 0), 0);
+      const l7shares = last7.reduce((s, d) => s + (d.total_shares || 0), 0);
+      const p7shares = prior7.reduce((s, d) => s + (d.total_shares || 0), 0);
+      ctx += `- Reach: last 7d ${l7reach.toLocaleString()} vs prior 7d ${p7reach.toLocaleString()} (${p7reach ? ((l7reach - p7reach) / p7reach * 100).toFixed(1) : '—'}%)\n`;
+      ctx += `- Shares: last 7d ${l7shares.toLocaleString()} vs prior 7d ${p7shares.toLocaleString()} (${p7shares ? ((l7shares - p7shares) / p7shares * 100).toFixed(1) : '—'}%)\n`;
+    }
+
+    return ctx;
+  } catch (e) {
+    if (db) db.close();
+    return `Error gathering data: ${e.message}`;
+  }
+}
+
+app.get('/api/insights', async (req, res) => {
+  const forceRefresh = req.query.refresh === 'true';
+
+  // Return cached if fresh
+  if (!forceRefresh && insightsCache.data && Date.now() - insightsCache.ts < INSIGHTS_TTL) {
+    return res.json({ ...insightsCache.data, cached: true, generatedAt: new Date(insightsCache.ts).toISOString() });
+  }
+
+  // If already generating, return status
+  if (insightsCache.generating) {
+    return res.json({ status: 'generating', message: 'Analysis in progress...' });
+  }
+
+  // Check API key
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  }
+
+  insightsCache.generating = true;
+
+  try {
+    const context = await gatherDashboardContext();
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const message = await client.messages.create({
+      model: 'claude-opus-4-0-20250514',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: `You are lil zucc, Headphonesty's Facebook performance analyst. You're direct, data-driven, slightly snarky, and obsessed with what the algo rewards. You speak in short punchy sentences with numbers up front.
+
+Analyze the following dashboard data and give a brief status report (4-6 bullet points max). Focus on:
+1. Are we on track for weekly targets? What's ahead/behind?
+2. Any concerning trends or patterns?
+3. What's working well right now?
+4. One actionable recommendation
+
+Keep it SHORT and punchy — this appears in a small widget. No fluff. Numbers first.
+
+Use basic HTML for formatting (<b>, <br>, bullet points as • lines). No markdown.
+
+${context}`
+      }]
+    });
+
+    const analysis = message.content[0]?.text || 'No analysis generated.';
+
+    insightsCache = {
+      ts: Date.now(),
+      data: { analysis, status: 'ok' },
+      generating: false
+    };
+
+    res.json({ analysis, status: 'ok', cached: false, generatedAt: new Date().toISOString() });
+  } catch (e) {
+    insightsCache.generating = false;
+    console.error('Insights error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/health', (req, res) => {
   const sgt = nowSGT();
   res.json({ status: 'ok', db: fs.existsSync(DB_PATH), timezone: 'SGT (UTC+8)', serverUTC: new Date().toISOString(), sgt: fmtDate(sgt) + 'T' + sgt.toISOString().slice(11) });
