@@ -304,7 +304,7 @@ const MAX_WEEKS_BACK=8;
 
 function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
 function pctDelta(curr,prev){if(!prev)return{txt:'—',cls:''};const p=((curr-prev)/prev*100);return{txt:(p>0?'↑':'↓')+Math.abs(p).toFixed(0)+'%',cls:p>=0?'sc-green':'sc-red'}}
-async function fetchJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json()}
+async function fetchJSON(u,timeoutMs=15000){const c=new AbortController();const t=setTimeout(()=>c.abort(),timeoutMs);try{const r=await fetch(u,{signal:c.signal});clearTimeout(t);if(!r.ok)throw new Error(r.status);return r.json()}catch(e){clearTimeout(t);throw e}}
 
 // SGT helper: returns a Date object offset to SGT (use UTC methods to read SGT values)
 function nowSGT(){return new Date(Date.now()+8*60*60*1000)}
@@ -379,7 +379,12 @@ async function loadScorecards(){
       ${mkCard('FB Clicks',sc.fbClicks)}
       <div class="sc"><div class="sc-label">Articles</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
     `;
-  }catch(e){console.error('Scorecards:',e)}
+  }catch(e){
+    console.error('Scorecards:',e);
+    document.querySelectorAll('.sc .sc-value').forEach(el=>{
+      if(el.textContent==='Loading...')el.innerHTML='<span style="color:var(--red)">Error</span>';
+    });
+  }
 }
 
 // ===== WEEK RANGE HELPERS =====
@@ -801,10 +806,9 @@ async function loadFacebook(){
 
 async function refreshAll(){
   document.getElementById('refreshBtn').textContent='⏳';
-  try{
-    await Promise.all([loadScorecards(),loadAlerts(),loadPublishing(),loadFBCalendar(),loadTraffic(),loadFacebook()]);
-    document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
-  }catch(e){console.error(e)}
+  const results=await Promise.allSettled([loadScorecards(),loadAlerts(),loadPublishing(),loadFBCalendar(),loadTraffic(),loadFacebook()]);
+  results.forEach((r,i)=>{if(r.status==='rejected')console.error(['Scorecards','Alerts','Publishing','FBCalendar','Traffic','Facebook'][i],r.reason)});
+  document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
   document.getElementById('refreshBtn').textContent='🔄';
 }
 
