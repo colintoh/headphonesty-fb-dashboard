@@ -163,7 +163,9 @@ app.get('/api/visitors-daily', async (req, res) => {
   const days = parseInt(req.query.days) || 30;
   try {
     const data = await clickyFetch('visitors', { date: `last-${days}-days`, daily: 1 });
-    res.json(data[0]?.dates?.map(d => ({ date: d.date, visitors: parseInt(d.items?.[0]?.value || '0') })) || []);
+    const result = (data[0]?.dates?.map(d => ({ date: d.date, visitors: parseInt(d.items?.[0]?.value || '0') })) || []);
+    result.sort((a, b) => a.date.localeCompare(b.date));
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
