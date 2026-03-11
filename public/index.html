@@ -888,7 +888,8 @@ setTimeout(() => {
   }).catch(() => {});
 }, 2000);
 
-refreshAll();
+// Initial load — wait for DOM + a small delay for mobile
+if(document.readyState==='complete'){refreshAll()}else{window.addEventListener('load',()=>setTimeout(refreshAll,300))}
 setInterval(()=>fetchJSON('/api/realtime').then(d=>{
   const el=document.querySelector('.pulse-number');
   if(el)el.textContent=d.visitors;
