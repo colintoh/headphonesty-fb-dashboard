@@ -382,7 +382,7 @@ async function loadScorecards(){
   }catch(e){
     console.error('Scorecards:',e);
     document.querySelectorAll('.sc .sc-value').forEach(el=>{
-      if(el.textContent==='Loading...')el.innerHTML='<span style="color:var(--red)">Error</span>';
+      if(el.textContent==='Loading...')el.innerHTML='<span style="color:var(--red);font-size:10px">'+e.message+'</span>';
     });
   }
 }
@@ -888,8 +888,17 @@ setTimeout(() => {
   }).catch(() => {});
 }, 2000);
 
-// Initial load — wait for DOM + a small delay for mobile
-if(document.readyState==='complete'){refreshAll()}else{window.addEventListener('load',()=>setTimeout(refreshAll,300))}
+// Initial load — wait for DOM + auto-retry on failure
+async function initialLoad(){
+  await refreshAll();
+  // Auto-retry if scorecards still show error
+  const sc=document.querySelector('.sc .sc-value');
+  if(sc&&(sc.textContent==='Loading...'||sc.querySelector('[style*="red"]'))){
+    console.log('Initial load failed, retrying in 2s...');
+    setTimeout(refreshAll,2000);
+  }
+}
+if(document.readyState==='complete'){initialLoad()}else{window.addEventListener('load',()=>setTimeout(initialLoad,300))}
 setInterval(()=>fetchJSON('/api/realtime').then(d=>{
   const el=document.querySelector('.pulse-number');
   if(el)el.textContent=d.visitors;
