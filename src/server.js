@@ -119,17 +119,20 @@ app.get('/api/scorecards', async (req, res) => {
     const priorEndStr = fmtDate(priorEnd);
     const currentEnd = isCurrentWeek ? fmtDate(nowSGT()) : wb.end;
 
-    // ALL 5 API calls in PARALLEL
-    const [vData, pvData, fbData, pfData, wpPosts] = await Promise.all([
+    // ALL 5 API calls in PARALLEL — graceful partial failures
+    const results = await Promise.allSettled([
       clickyFetch('visitors', { date: `${wb.start},${currentEnd}` }),
       clickyFetch('visitors', { date: `${priorWb.start},${priorEndStr}` }),
       fetchLabby(wb.start, currentEnd),
       fetchLabby(priorWb.start, priorEndStr),
       fetch(`https://www.headphonesty.com/wp-json/wp/v2/posts?per_page=100&after=${wb.start}T00:00:00&before=${wb.end}T23:59:59&_fields=id,date,title,link&status=publish&orderby=date&order=desc`).then(r => r.json()).catch(() => []),
     ]);
+    const val = (i) => results[i].status === 'fulfilled' ? results[i].value : null;
+    const vData = val(0), pvData = val(1), fbData = val(2) || {}, pfData = val(3) || {}, wpPosts = val(4) || [];
+    results.forEach((r, i) => { if (r.status === 'rejected') console.error(`Scorecards API ${i} failed:`, r.reason?.message || r.reason); });
 
-    const visitors = parseInt(vData[0]?.dates?.[0]?.items?.[0]?.value || '0');
-    const priorVisitors = parseInt(pvData[0]?.dates?.[0]?.items?.[0]?.value || '0');
+    const visitors = parseInt(vData?.[0]?.dates?.[0]?.items?.[0]?.value || '0');
+    const priorVisitors = parseInt(pvData?.[0]?.dates?.[0]?.items?.[0]?.value || '0');
     const fbReach = fbData.totalReach || 0;
     const fbClicks = fbData.totalFacebookLinkClicks || 0;
     const priorReach = pfData.totalReach || 0;
