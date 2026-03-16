@@ -292,6 +292,54 @@ app.get('/api/mix', (req, res) => {
   } finally { db.close(); }
 });
 
+// Content Impact — aggregated by type with median reach
+app.get('/api/content-impact', (req, res) => {
+  const weeksAgo = parseInt(req.query.weeksAgo) || 0;
+  const wb = getWeekBounds(weeksAgo);
+  const currentEnd = weeksAgo === 0 ? fmtDate(nowSGT()) : wb.end;
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'DB not available' });
+  try {
+    // Get all posts for the week grouped by type
+    const posts = db.prepare(`SELECT post_type, reach, shares, comments FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ORDER BY post_type, reach`).all(wb.start, currentEnd);
+
+    // Group by type and compute stats
+    const byType = {};
+    let totalReach = 0;
+    let totalPosts = 0;
+    posts.forEach(p => {
+      if (!byType[p.post_type]) byType[p.post_type] = { posts: [], totalReach: 0, totalShares: 0, totalComments: 0 };
+      byType[p.post_type].posts.push(p.reach);
+      byType[p.post_type].totalReach += (p.reach || 0);
+      byType[p.post_type].totalShares += (p.shares || 0);
+      byType[p.post_type].totalComments += (p.comments || 0);
+      totalReach += (p.reach || 0);
+      totalPosts++;
+    });
+
+    const result = Object.entries(byType).map(([type, d]) => {
+      const sorted = d.posts.sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+      const engRate = d.totalReach > 0 ? ((d.totalShares + d.totalComments) / d.totalReach * 100) : 0;
+      return {
+        type,
+        count: sorted.length,
+        countPct: totalPosts > 0 ? Math.round(sorted.length / totalPosts * 100) : 0,
+        totalReach: d.totalReach,
+        reachPct: totalReach > 0 ? Math.round(d.totalReach / totalReach * 100) : 0,
+        medianReach: median,
+        totalShares: d.totalShares,
+        totalComments: d.totalComments,
+        engRate: Math.round(engRate * 100) / 100
+      };
+    }).sort((a, b) => b.medianReach - a.medianReach);
+
+    res.json({ weekRange: wb, totalPosts, totalReach, types: result });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+  finally { db.close(); }
+});
+
 // Posts detail by day (for distribution calendar popup)
 app.get('/api/fb-posts-detail', (req, res) => {
   const { start, end } = getDateRange(req.query, 60);

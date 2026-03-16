@@ -229,13 +229,19 @@
   <div class="card"><h3>Daily Reach (30d)</h3><canvas id="reachChart"></canvas></div>
   <div class="card"><h3>Engagement — Comments & Shares</h3><canvas id="engagementChart"></canvas></div>
 </div>
-<div class="grid grid-3">
+<div class="grid">
   <div class="card">
-    <h3>Content Mix <span id="mixPeriod">(This Week)</span></h3>
-    <div class="mix-bar" id="mixBar"></div>
-    <div class="mix-legend" id="mixLegend"></div>
-    <div style="margin-top:10px" id="mixTargets"></div>
+    <h3>📊 Content Impact <span id="impactPeriod" style="font-size:11px;color:var(--dim)">(This Week)</span></h3>
+    <div id="impactBars" style="margin-bottom:12px"></div>
+    <div style="overflow-x:auto">
+      <table class="data-table" style="font-size:11px">
+        <thead><tr><th>Type</th><th>Posts</th><th>Total Reach</th><th>Median Reach</th><th>Shares</th><th>Eng%</th></tr></thead>
+        <tbody id="impactBody"></tbody>
+      </table>
+    </div>
   </div>
+</div>
+<div class="grid grid-2">
   <div class="card">
     <h3>Posting Slots (3 Weeks)</h3>
     <div id="slotGrid"></div>
@@ -712,11 +718,11 @@ async function loadFacebook(){
   const selWeek=getSelectedWeek();
   const slot2ago=new Date(new Date(selWeek.start+'T12:00:00Z').getTime()-14*86400000);
   const slotsStart=slot2ago.toISOString().slice(0,10);
-  const [daily,hourly,topPosts,mix,fbDaily,fbSlots3w]=await Promise.all([
+  const [daily,hourly,topPosts,impact,fbDaily,fbSlots3w]=await Promise.all([
     fetchJSON('/api/daily?days=30'),
     fetchJSON('/api/hourly?days=30'),
     fetchJSON(`/api/top-posts?${wp}`),
-    fetchJSON(`/api/mix?${wp}`),
+    fetchJSON(`/api/content-impact?weeksAgo=${weeksAgo}`),
     fetchJSON(`/api/fb-daily-posts?${wp}`),
     fetchJSON(`/api/fb-daily-posts?start=${slotsStart}&end=${selWeek.end}`),
   ]);
@@ -731,18 +737,30 @@ async function loadFacebook(){
   if(engagementChart)engagementChart.destroy();
   engagementChart=new Chart(ctx4,{type:'bar',data:{labels:daily.map(d=>d.day.slice(5)),datasets:[{label:'Shares',data:daily.map(d=>d.total_shares),backgroundColor:'#22c55e',borderRadius:3},{label:'Comments',data:daily.map(d=>d.total_comments),backgroundColor:'#3b82f6',borderRadius:3}]},options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10}}},scales:{y:{ticks:{color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}});
 
-  // Mix
-  const sw2=getSelectedWeek();
-  const mixDayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const sgtNow=nowSGT();
-  const mixDow=(sgtNow.getUTCDay()||7)-1;
-  const mixLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
-  document.getElementById('mixPeriod').textContent=`(${mixLabel})`;
-  const weekMix={};let weekTotal=0;
-  mix.forEach(d=>{weekMix[d.post_type]=(weekMix[d.post_type]||0)+d.cnt;weekTotal+=d.cnt});
-  document.getElementById('mixBar').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{const p=(c/weekTotal*100);return `<div style="width:${p}%;background:${typeColors[t]||'#6b7280'}">${p>8?t+' '+Math.round(p)+'%':''}</div>`}).join('');
-  document.getElementById('mixLegend').innerHTML=Object.entries(weekMix).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<span><span class="dot" style="background:${typeColors[t]||'#6b7280'}"></span>${t} ${(c/weekTotal*100).toFixed(0)}%</span>`).join('');
-  document.getElementById('mixTargets').innerHTML=Object.entries(targets).map(([type,target])=>{const actual=((weekMix[type]||0)/weekTotal*100);const diff=Math.abs(actual-target);const barColor=diff<=5?typeColors[type]:(actual<target?'#ef4444':'#f59e0b');return `<div class="target-row"><div class="target-label">${type}</div><div class="target-bar-bg"><div class="target-bar-fill" style="width:${Math.min(actual,60)}%;background:${barColor}"></div><div class="target-bar-marker" style="left:${target}%"></div></div><div class="target-pct" style="color:${barColor}">${actual.toFixed(0)}%</div></div>`}).join('');
+  // Content Impact
+  if(impact&&impact.types){
+    const mixDayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const sgtNow=nowSGT();
+    const mixDow=(sgtNow.getUTCDay()||7)-1;
+    const mixLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
+    document.getElementById('impactPeriod').textContent=`(${mixLabel})`;
+
+    // Stacked bars: Posts vs Reach contribution
+    let barsHtml='<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><div style="font-size:9px;color:var(--dim);width:50px;text-align:right">Posts</div><div class="mix-bar" style="flex:1;height:20px;display:flex;border-radius:4px;overflow:hidden">';
+    impact.types.forEach(t=>{const c=typeColors[t.type]||'#6b7280';barsHtml+=`<div style="width:${t.countPct}%;background:${c};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff;white-space:nowrap">${t.countPct>8?t.type+' '+t.countPct+'%':''}</div>`});
+    barsHtml+='</div></div>';
+    barsHtml+='<div style="display:flex;gap:8px;align-items:center"><div style="font-size:9px;color:var(--dim);width:50px;text-align:right">Reach</div><div class="mix-bar" style="flex:1;height:20px;display:flex;border-radius:4px;overflow:hidden">';
+    impact.types.forEach(t=>{const c=typeColors[t.type]||'#6b7280';barsHtml+=`<div style="width:${t.reachPct}%;background:${c};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff;white-space:nowrap">${t.reachPct>8?t.type+' '+t.reachPct+'%':''}</div>`});
+    barsHtml+='</div></div>';
+    document.getElementById('impactBars').innerHTML=barsHtml;
+
+    // Impact table
+    document.getElementById('impactBody').innerHTML=impact.types.map(t=>{
+      const color=typeColors[t.type]||'#6b7280';
+      const mismatch=t.reachPct<t.countPct?'⬇️':'⬆️';
+      return `<tr><td><span class="dot" style="background:${color}"></span> ${t.type}</td><td>${t.count} <span style="color:var(--dim)">(${t.countPct}%)</span></td><td>${fmt(t.totalReach)} <span style="color:var(--dim)">(${t.reachPct}%)</span></td><td style="font-weight:600">${fmt(t.medianReach)}</td><td>${t.totalShares}</td><td>${t.engRate}%</td></tr>`;
+    }).join('');
+  }
 
   // Slots — 3 weeks (selected + 2 prior), grouped by week rows
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
