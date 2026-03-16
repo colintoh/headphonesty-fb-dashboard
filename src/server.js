@@ -233,6 +233,103 @@ app.get('/api/wp-posts', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ===== NOTION / ICEBOX PIPELINE =====
+const NOTION_API_KEY = process.env.NOTION_API_KEY || '';
+const NOTION_DB_ID = '9186c98c714c4125a3b477f63b4a86a0';
+const NOTION_BASE = 'https://api.notion.com/v1';
+
+async function notionQuery(dbId, filter = {}, startCursor = undefined) {
+  const body = { page_size: 100, ...filter };
+  if (startCursor) body.start_cursor = startCursor;
+  const r = await fetch(`${NOTION_BASE}/databases/${dbId}/query`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${NOTION_API_KEY}`,
+      'Notion-Version': '2022-06-28',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function notionQueryAll(dbId, filter = {}) {
+  let all = [];
+  let cursor = undefined;
+  do {
+    const resp = await notionQuery(dbId, filter, cursor);
+    all = all.concat(resp.results || []);
+    cursor = resp.has_more ? resp.next_cursor : undefined;
+  } while (cursor);
+  return all;
+}
+
+// Cache icebox data for 5 min
+let iceboxCache = { ts: 0, data: null };
+const ICEBOX_CACHE_TTL = 5 * 60 * 1000;
+
+app.get('/api/icebox', async (req, res) => {
+  const now = Date.now();
+  if (iceboxCache.data && now - iceboxCache.ts < ICEBOX_CACHE_TTL && !req.query.refresh) {
+    return res.json(iceboxCache.data);
+  }
+
+  try {
+    // Two parallel queries: Icebox items (bank) + ALL items (inflow)
+    const [iceboxItems, allItems] = await Promise.all([
+      notionQueryAll(NOTION_DB_ID, { filter: { property: 'Stage', select: { equals: 'Icebox' } } }),
+      notionQueryAll(NOTION_DB_ID, {})
+    ]);
+
+    // Bank: current Icebox breakdown
+    let listicles = 0, nonListicles = 0;
+    const bankItems = iceboxItems.map(p => {
+      const title = (p.properties['Angle']?.title || []).map(t => t.plain_text).join('');
+      const types = (p.properties['Article Type']?.multi_select || []).map(t => t.name);
+      const isList = types.includes('List');
+      if (isList) listicles++; else nonListicles++;
+      return { id: p.id, title, types, created: p.created_time };
+    });
+
+    // Weekly inflow: group ALL items by created_time week (Mon-Sun)
+    const weekMap = {};
+    allItems.forEach(p => {
+      const created = new Date(p.created_time);
+      // Convert to SGT
+      const sgt = new Date(created.getTime() + 8 * 60 * 60 * 1000);
+      const day = sgt.getUTCDay(); // 0=Sun
+      const diffToMon = day === 0 ? 6 : day - 1;
+      const mon = new Date(sgt);
+      mon.setUTCDate(mon.getUTCDate() - diffToMon);
+      const weekKey = mon.toISOString().slice(0, 10);
+      weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+    });
+
+    // Sort weeks descending, last 12 weeks
+    const weeklyInflow = Object.entries(weekMap)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 12)
+      .map(([week, count]) => ({ week, count }));
+
+    const thisWeek = weeklyInflow[0]?.count || 0;
+    const lastWeek = weeklyInflow[1]?.count || 0;
+
+    const result = {
+      bank: { total: iceboxItems.length, listicles, nonListicles, items: bankItems },
+      weeklyInflow,
+      thisWeek,
+      lastWeek,
+      totalTopics: allItems.length
+    };
+
+    iceboxCache = { ts: now, data: result };
+    res.json(result);
+  } catch (e) {
+    console.error('Icebox error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== POSTS.DB =====
 // All DB queries convert created_at (UTC+0000) to SGT date before grouping/filtering
 const SGT_DAY_EXPR = `CASE WHEN CAST(substr(created_at,12,2) AS INTEGER) >= 16 THEN date(substr(created_at,1,10), '+1 day') ELSE substr(created_at,1,10) END`;

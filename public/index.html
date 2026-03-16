@@ -27,7 +27,7 @@
   .loading-overlay.show{display:flex}
 
   /* Scorecard row with real-time */
-  .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;min-height:110px}
+  .sc-row{display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;min-height:110px}
   .pulse-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px}
   .pulse-number{font-size:44px;font-weight:800;letter-spacing:-2px;line-height:1}
   .pulse-label{font-size:10px;color:var(--dim);margin-top:4px}
@@ -116,6 +116,15 @@
   .alert-danger{background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5}
   .alert-ok{background:#052e16;border:1px solid #14532d;color:#86efac}
 
+  /* Icebox pipeline */
+  .icebox-split{display:flex;gap:4px;margin-top:6px}
+  .icebox-pill{padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600}
+  .icebox-pill-list{background:#2d1b69;color:#c084fc}
+  .icebox-pill-other{background:#1a2744;color:#60a5fa}
+  .inflow-bars{display:flex;align-items:flex-end;gap:2px;height:40px;margin-top:6px}
+  .inflow-bar{flex:1;border-radius:2px 2px 0 0;min-width:6px;position:relative;cursor:default}
+  .inflow-bar:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:2px 6px;border-radius:4px;font-size:9px;white-space:nowrap;z-index:10}
+
   @media(max-width:900px){
     .sc-row{grid-template-columns:1fr 1fr}
     .pulse-card{grid-column:1/-1}
@@ -158,6 +167,19 @@
 
 <!-- Alerts -->
 <div id="alerts"></div>
+
+<!-- Pipeline -->
+<div class="section-label">🧊 Topic Pipeline</div>
+<div class="grid grid-2">
+  <div class="card">
+    <h3>Weekly Topic Inflow (Last 12 Weeks)</h3>
+    <canvas id="inflowChart"></canvas>
+  </div>
+  <div class="card">
+    <h3>Icebox Bank — Available Topics</h3>
+    <div id="iceboxDetail"></div>
+  </div>
+</div>
 
 <!-- Publishing -->
 <div class="section-label">📝 Publishing</div>
@@ -302,7 +324,7 @@
 const typeColors={fresh:'#3b82f6',meme:'#a855f7',story:'#22c55e',status:'#f59e0b',reel:'#06b6d4',recycled:'#f97316',other:'#6b7280'};
 const targets={fresh:42,meme:22,story:17,status:17,reel:2};
 const FB_DAILY_TARGET=16;
-let visitorsChart,reachChart,engagementChart;
+let visitorsChart,reachChart,engagementChart,inflowChart;
 let weeksAgo=0;
 const MAX_WEEKS_BACK=8;
 
@@ -372,6 +394,32 @@ async function loadScorecards(){
     const artPace=artPct>=100?'sc-green':artPct>=50?'sc-orange':'sc-red';
     const artFill=artPace==='sc-green'?'var(--green)':artPace==='sc-orange'?'var(--orange)':'var(--red)';
 
+    // Fetch icebox data for scorecard
+    let iceboxHtml = '';
+    try {
+      const ice = await fetchJSON('/api/icebox');
+      const inflowDelta = pctDelta(ice.thisWeek, ice.lastWeek);
+      iceboxHtml = `
+        <div class="sc">
+          <div class="sc-label">Topic Inflow</div>
+          <div class="sc-value">${ice.thisWeek}<span style="font-size:12px;color:var(--dim);font-weight:400"> this week</span></div>
+          <div class="sc-delta ${inflowDelta.cls}">${inflowDelta.txt} vs last week (${ice.lastWeek})</div>
+          <div class="inflow-bars">${ice.weeklyInflow.slice(0,8).reverse().map((w,i,arr)=>{const max=Math.max(...arr.map(x=>x.count),1);const h=Math.max(w.count/max*100,4);const isLast=i===arr.length-1;return `<div class="inflow-bar" style="height:${h}%;background:${isLast?'var(--accent)':'#2a2a3a'}" data-tip="${w.week}: ${w.count}"></div>`}).join('')}</div>
+        </div>
+        <div class="sc">
+          <div class="sc-label">Icebox Bank</div>
+          <div class="sc-value">${ice.bank.total}<span style="font-size:12px;color:var(--dim);font-weight:400"> topics</span></div>
+          <div class="sc-sub" style="color:var(--dim)">${ice.totalTopics} total in pipeline</div>
+          <div class="icebox-split">
+            <span class="icebox-pill icebox-pill-list">📝 ${ice.bank.listicles} listicles</span>
+            <span class="icebox-pill icebox-pill-other">📰 ${ice.bank.nonListicles} other</span>
+          </div>
+        </div>
+      `;
+      // Store for pipeline section
+      window._iceboxData = ice;
+    } catch(e) { console.error('Icebox:', e); }
+
     document.getElementById('scRow').innerHTML=`
       <div class="pulse-card" style="border-color:${pulseColor}30">
         <div class="pulse-number" style="color:${pulseColor}">${v}</div>
@@ -382,6 +430,7 @@ async function loadScorecards(){
       ${mkCard('FB Reach',sc.fbReach)}
       ${mkCard('FB Clicks',sc.fbClicks)}
       <div class="sc"><div class="sc-label">Articles</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
+      ${iceboxHtml}
     `;
   }catch(e){
     console.error('Scorecards:',e);
@@ -832,10 +881,70 @@ async function loadFacebook(){
   }).join('');
 }
 
+// ===== PIPELINE =====
+async function loadPipeline(){
+  const ice = window._iceboxData;
+  if (!ice) return;
+
+  // Inflow chart (last 12 weeks)
+  const weeks = ice.weeklyInflow.slice().reverse();
+  const ctx = document.getElementById('inflowChart').getContext('2d');
+  if (inflowChart) inflowChart.destroy();
+  inflowChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weeks.map(w => w.week.slice(5)), // MM-DD
+      datasets: [{
+        label: 'Topics Added',
+        data: weeks.map(w => w.count),
+        backgroundColor: weeks.map((w, i) => i === weeks.length - 1 ? '#6366f1' : '#2a2a4a'),
+        borderRadius: 3,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#6b6b80' }, grid: { color: '#1e1e2e' } },
+        x: { ticks: { color: '#6b6b80', font: { size: 9 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Icebox detail list
+  const items = ice.bank.items || [];
+  const listItems = items.filter(i => i.types.includes('List'));
+  const otherItems = items.filter(i => !i.types.includes('List'));
+
+  let html = `<div style="margin-bottom:8px;font-size:11px;color:var(--dim)">
+    <strong style="color:var(--text)">${ice.bank.total}</strong> unassigned topics · 
+    <span style="color:#c084fc">${ice.bank.listicles} listicles</span> · 
+    <span style="color:#60a5fa">${ice.bank.nonListicles} other</span>
+  </div>`;
+
+  html += '<div style="max-height:200px;overflow-y:auto">';
+  html += '<table class="data-table"><thead><tr><th>Topic</th><th>Type</th><th>Added</th></tr></thead><tbody>';
+  items.sort((a, b) => b.created.localeCompare(a.created)).forEach(item => {
+    const isList = item.types.includes('List');
+    const badge = item.types.length ? item.types.map(t => {
+      const cls = t === 'List' ? 'type-meme' : t === 'Feature' ? 'type-fresh' : t === 'Rumor' ? 'type-reel' : t === 'Gear Test' ? 'type-story' : t === 'Refresh' ? 'type-status' : 'type-other';
+      return `<span class="type-badge ${cls}">${t}</span>`;
+    }).join(' ') : '<span class="type-badge type-other">untyped</span>';
+    const title = (item.title || 'Untitled').slice(0, 60);
+    const added = item.created.slice(0, 10);
+    html += `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.title}">${title}</td><td>${badge}</td><td style="font-size:10px;color:var(--dim);white-space:nowrap">${added}</td></tr>`;
+  });
+  html += '</tbody></table></div>';
+
+  document.getElementById('iceboxDetail').innerHTML = html;
+}
+
 async function refreshAll(){
   document.getElementById('refreshBtn').textContent='⏳';
   const results=await Promise.allSettled([loadScorecards(),loadAlerts(),loadPublishing(),loadFBCalendar(),loadTraffic(),loadFacebook()]);
   results.forEach((r,i)=>{if(r.status==='rejected')console.error(['Scorecards','Alerts','Publishing','FBCalendar','Traffic','Facebook'][i],r.reason)});
+  await loadPipeline(); // Must run after scorecards (depends on _iceboxData)
   document.getElementById('lastUpdate').textContent=new Date().toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
   document.getElementById('refreshBtn').textContent='🔄';
 }
