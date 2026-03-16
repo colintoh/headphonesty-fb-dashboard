@@ -745,13 +745,25 @@ async function loadFacebook(){
     const mixLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
     document.getElementById('impactPeriod').textContent=`(${mixLabel})`;
 
-    // Stacked bars: Posts vs Reach contribution
-    let barsHtml='<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><div style="font-size:9px;color:var(--dim);width:50px;text-align:right">Posts</div><div class="mix-bar" style="flex:1;height:20px;display:flex;border-radius:4px;overflow:hidden">';
-    impact.types.forEach(t=>{const c=typeColors[t.type]||'#6b7280';barsHtml+=`<div style="width:${t.countPct}%;background:${c};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff;white-space:nowrap">${t.countPct>8?t.type+' '+t.countPct+'%':''}</div>`});
-    barsHtml+='</div></div>';
-    barsHtml+='<div style="display:flex;gap:8px;align-items:center"><div style="font-size:9px;color:var(--dim);width:50px;text-align:right">Reach</div><div class="mix-bar" style="flex:1;height:20px;display:flex;border-radius:4px;overflow:hidden">';
-    impact.types.forEach(t=>{const c=typeColors[t.type]||'#6b7280';barsHtml+=`<div style="width:${t.reachPct}%;background:${c};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff;white-space:nowrap">${t.reachPct>8?t.type+' '+t.reachPct+'%':''}</div>`});
-    barsHtml+='</div></div>';
+    // Paired horizontal bars: Posts% vs Reach% per type
+    const maxPct=Math.max(...impact.types.flatMap(t=>[t.countPct,t.reachPct]),1);
+    let barsHtml='<div style="display:flex;flex-direction:column;gap:10px">';
+    impact.types.forEach(t=>{
+      const c=typeColors[t.type]||'#6b7280';
+      const diff=t.reachPct-t.countPct;
+      const arrow=diff>2?'⬆️':diff<-2?'⬇️':'';
+      const diffColor=diff>2?'var(--green)':diff<-2?'var(--red)':'var(--dim)';
+      const scale=100/maxPct; // scale bars so largest fills full width
+      barsHtml+=`<div style="display:grid;grid-template-columns:65px 1fr 40px;gap:6px;align-items:center">`;
+      barsHtml+=`<div style="font-size:11px;font-weight:600"><span class="dot" style="background:${c}"></span>${t.type}</div>`;
+      barsHtml+=`<div style="display:flex;flex-direction:column;gap:2px">`;
+      barsHtml+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:var(--dim);width:32px">Posts</div><div style="height:10px;border-radius:3px;background:${c};opacity:0.4;width:${t.countPct*scale}%;min-width:2px;transition:width 0.3s"></div><span style="font-size:9px;color:var(--dim)">${t.countPct}%</span></div>`;
+      barsHtml+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:var(--dim);width:32px">Reach</div><div style="height:10px;border-radius:3px;background:${c};width:${t.reachPct*scale}%;min-width:2px;transition:width 0.3s"></div><span style="font-size:9px;color:var(--dim)">${t.reachPct}%</span></div>`;
+      barsHtml+=`</div>`;
+      barsHtml+=`<div style="font-size:10px;color:${diffColor};font-weight:600;text-align:right">${arrow} ${diff>0?'+':''}${diff}%</div>`;
+      barsHtml+=`</div>`;
+    });
+    barsHtml+='</div>';
     document.getElementById('impactBars').innerHTML=barsHtml;
 
     // Impact table
