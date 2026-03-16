@@ -317,10 +317,13 @@ app.get('/api/content-impact', (req, res) => {
       totalPosts++;
     });
 
+    // Ensure all known types are present
+    const allTypes = ['fresh', 'meme', 'story', 'status', 'reel', 'recycled', 'other'];
+    allTypes.forEach(t => { if (!byType[t]) byType[t] = { posts: [], totalReach: 0, totalShares: 0, totalComments: 0 }; });
+
     const result = Object.entries(byType).map(([type, d]) => {
       const sorted = d.posts.sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      const median = sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+      const median = sorted.length === 0 ? 0 : sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : Math.round((sorted[Math.floor(sorted.length / 2) - 1] + sorted[Math.floor(sorted.length / 2)]) / 2);
       const engRate = d.totalReach > 0 ? ((d.totalShares + d.totalComments) / d.totalReach * 100) : 0;
       return {
         type,
