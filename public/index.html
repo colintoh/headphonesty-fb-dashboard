@@ -163,6 +163,8 @@
   <div class="sc"><div class="sc-label">FB Reach</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
   <div class="sc"><div class="sc-label">FB Clicks</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
   <div class="sc"><div class="sc-label">Articles</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc"><div class="sc-label">Topic Inflow</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc"><div class="sc-label">Icebox Bank</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
 </div>
 
 <!-- Alerts -->
@@ -408,8 +410,8 @@ async function loadScorecards(){
         </div>
         <div class="sc">
           <div class="sc-label">Icebox Bank</div>
-          <div class="sc-value">${ice.bank.total}<span style="font-size:12px;color:var(--dim);font-weight:400"> topics</span></div>
-          <div class="sc-sub" style="color:var(--dim)">${ice.totalTopics} total in pipeline</div>
+          <div class="sc-value">${ice.bank.total}<span style="font-size:12px;color:var(--dim);font-weight:400"> / 40</span></div>
+          ${(()=>{const pct=Math.min(ice.bank.total/40*100,100);const pace=ice.bank.total>=40?'sc-green':ice.bank.total>=30?'sc-orange':'sc-red';const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';return `<div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div>`})()}
           <div class="icebox-split">
             <span class="icebox-pill icebox-pill-list">📝 ${ice.bank.listicles} listicles</span>
             <span class="icebox-pill icebox-pill-other">📰 ${ice.bank.nonListicles} other</span>
