@@ -275,10 +275,11 @@ app.get('/api/icebox', async (req, res) => {
   }
 
   try {
-    // Two parallel queries: Icebox items (bank) + ALL items (inflow)
-    const [iceboxItems, allItems] = await Promise.all([
+    // Two parallel queries: Icebox items (bank) + recent items (inflow, last 13 weeks only)
+    const inflowStart = new Date(Date.now() - 13 * 7 * 86400000).toISOString();
+    const [iceboxItems, recentItems] = await Promise.all([
       notionQueryAll(NOTION_DB_ID, { filter: { property: 'Stage', select: { equals: 'Icebox' } } }),
-      notionQueryAll(NOTION_DB_ID, {})
+      notionQueryAll(NOTION_DB_ID, { filter: { timestamp: 'created_time', created_time: { on_or_after: inflowStart } } })
     ]);
 
     // Bank: current Icebox breakdown
@@ -291,9 +292,9 @@ app.get('/api/icebox', async (req, res) => {
       return { id: p.id, title, types, created: p.created_time };
     });
 
-    // Weekly inflow: group ALL items by created_time week (Mon-Sun)
+    // Weekly inflow: group recent items by created_time week (Mon-Sun)
     const weekMap = {};
-    allItems.forEach(p => {
+    recentItems.forEach(p => {
       const created = new Date(p.created_time);
       // Convert to SGT
       const sgt = new Date(created.getTime() + 8 * 60 * 60 * 1000);
@@ -319,7 +320,7 @@ app.get('/api/icebox', async (req, res) => {
       weeklyInflow,
       thisWeek,
       lastWeek,
-      totalTopics: allItems.length
+      totalTopics: recentItems.length
     };
 
     iceboxCache = { ts: now, data: result };
