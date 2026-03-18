@@ -125,6 +125,10 @@
   .inflow-bar{flex:1;border-radius:2px 2px 0 0;min-width:6px;position:relative;cursor:default}
   .inflow-bar:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:2px 6px;border-radius:4px;font-size:9px;white-space:nowrap;z-index:10}
 
+  /* Skeleton loading */
+  .skeleton{height:22px;width:70px;background:linear-gradient(90deg,#1a1a2a 25%,#252535 50%,#1a1a2a 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
   @media(max-width:900px){
     .sc-row{grid-template-columns:1fr 1fr}
     .pulse-card{grid-column:1/-1}
@@ -159,12 +163,12 @@
 <!-- Pulse + Scorecards -->
 <div class="sc-row" id="scRow">
   <div class="pulse-card" style="border-color:#1e1e2e"><div class="pulse-number" style="color:var(--dim)">—</div><div class="pulse-label">visitors now</div></div>
-  <div class="sc"><div class="sc-label">Visitors</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
-  <div class="sc"><div class="sc-label">FB Reach</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
-  <div class="sc"><div class="sc-label">FB Clicks</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
-  <div class="sc"><div class="sc-label">Articles</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
-  <div class="sc"><div class="sc-label">Topic Inflow</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
-  <div class="sc"><div class="sc-label">Icebox Bank</div><div class="sc-value" style="color:var(--dim)">Loading...</div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-visitors"><div class="sc-label">Visitors</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-reach"><div class="sc-label">FB Reach</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-clicks"><div class="sc-label">FB Clicks</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-articles"><div class="sc-label">Articles</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-inflow"><div class="sc-label">Topic Inflow</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
+  <div class="sc" id="sc-icebox"><div class="sc-label">Icebox Bank</div><div class="sc-value"><div class="skeleton"></div></div><div class="sc-bar"><div class="sc-fill" style="width:0%"></div></div></div>
 </div>
 
 <!-- Alerts -->
@@ -364,82 +368,70 @@ function updateNavButtons(){
 }
 
 // ===== PULSE + SCORECARDS =====
+// Helper: render a single scorecard into its container
+function renderCard(id,label,data,compLabel,isCurrentWeek){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const pct=Math.min(data.current/data.target*100,100);
+  const delta=pctDelta(data.current,data.prior);
+  const pace=data.projected>=data.target?'sc-green':data.projected>=data.target*0.8?'sc-orange':'sc-red';
+  const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';
+  const projText=isCurrentWeek&&data.projected?`Proj: ${fmt(data.projected)}`:'';
+  el.innerHTML=`<div class="sc-label">${label}</div><div class="sc-value">${fmt(data.current)}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${fmt(data.target)}</span></div>${projText?`<div class="sc-sub ${pace}">${projText}</div>`:''}<div class="sc-delta ${delta.cls}">${delta.txt} ${compLabel}</div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div>`;
+}
+
 async function loadScorecards(){
-  try{
-    const [rt,sc]=await Promise.all([
-      fetchJSON('/api/realtime'),
-      fetchJSON(`/api/scorecards?weeksAgo=${weeksAgo}`)
-    ]);
+  // All scorecard data sources load independently — each card renders as its data arrives
+  const wb=getWeekBounds(weeksAgo);
+  const isCurrentWeek=weeksAgo===0;
+  const daysElapsed=isCurrentWeek?wb.dayOfWeek:7;
+  const compLabel=isCurrentWeek?`vs prior week (Mon-${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][daysElapsed-1]})`:'vs prior week';
+  const wLabel=fmtWeekLabel(wb.start,wb.end);
+  document.getElementById('weekLabel').innerHTML=wLabel+(isCurrentWeek?'<span class="current-badge">This Week</span>':'');
+  document.getElementById('dateRange').textContent=`${wb.start} → ${wb.end}`;
+
+  // 1. Pulse — independent, fastest
+  fetchJSON('/api/realtime').then(rt=>{
     const v=rt.visitors;
     const pulseColor=v>=200?'var(--green)':v>=100?'var(--orange)':'var(--red)';
     const pulseBg=v>=200?'#052e16':v>=100?'#422006':'#450a0a';
     const pulseText=v>=200?'🟢 Strong':v>=100?'🟡 Normal':'🔴 Low';
+    const pc=document.querySelector('.pulse-card');
+    if(pc)pc.innerHTML=`<div class="pulse-number" style="color:${pulseColor}">${v}</div><div class="pulse-label">visitors now</div><div class="pulse-badge" style="background:${pulseBg};color:${pulseColor}">${pulseText}</div>`;
+    pc.style.borderColor=pulseColor+'30';
+  }).catch(e=>console.error('Pulse:',e));
 
-    // Update week label
-    const wr=sc.weekRange;
-    const wLabel=fmtWeekLabel(wr.start,wr.end);
-    document.getElementById('weekLabel').innerHTML=wLabel+(sc.isCurrentWeek?'<span class="current-badge">This Week</span>':'');
-    document.getElementById('dateRange').textContent=`${wr.start} → ${wr.end}`;
-
-    const compLabel=sc.isCurrentWeek?`vs prior week (Mon-${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][sc.daysElapsed-1]})`:'vs prior week';
-
-    function mkCard(label,data){
-      const pct=Math.min(data.current/data.target*100,100);
-      const delta=pctDelta(data.current,data.prior);
-      const pace=data.projected>=data.target?'sc-green':data.projected>=data.target*0.8?'sc-orange':'sc-red';
-      const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';
-      const projText=sc.isCurrentWeek&&data.projected?`Proj: ${fmt(data.projected)}`:'';
-      return `<div class="sc"><div class="sc-label">${label}</div><div class="sc-value">${fmt(data.current)}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${fmt(data.target)}</span></div>${projText?`<div class="sc-sub ${pace}">${projText}</div>`:''}<div class="sc-delta ${delta.cls}">${delta.txt} ${compLabel}</div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div></div>`;
-    }
-
+  // 2. Scorecards from /api/scorecards — contains Visitors, FB Reach, FB Clicks, Articles
+  fetchJSON(`/api/scorecards?weeksAgo=${weeksAgo}`).then(sc=>{
+    renderCard('sc-visitors','Visitors',sc.visitors,compLabel,sc.isCurrentWeek);
+    renderCard('sc-reach','FB Reach',sc.fbReach,compLabel,sc.isCurrentWeek);
+    renderCard('sc-clicks','FB Clicks',sc.fbClicks,compLabel,sc.isCurrentWeek);
+    // Articles
     const artPct=Math.min(sc.articles.current/sc.articles.target*100,100);
     const artPace=artPct>=100?'sc-green':artPct>=50?'sc-orange':'sc-red';
     const artFill=artPace==='sc-green'?'var(--green)':artPace==='sc-orange'?'var(--orange)':'var(--red)';
-
-    // Fetch icebox data for scorecard
-    let iceboxHtml = '';
-    try {
-      const ice = await fetchJSON('/api/icebox');
-      const inflowDelta = pctDelta(ice.thisWeek, ice.lastWeek);
-      iceboxHtml = `
-        <div class="sc">
-          <div class="sc-label">Topic Inflow</div>
-          <div class="sc-value">${ice.thisWeek}<span style="font-size:12px;color:var(--dim);font-weight:400"> this week</span></div>
-          <div class="sc-delta ${inflowDelta.cls}">${inflowDelta.txt} vs last week (${ice.lastWeek})</div>
-          <div class="inflow-bars">${ice.weeklyInflow.slice(0,8).reverse().map((w,i,arr)=>{const max=Math.max(...arr.map(x=>x.count),1);const h=Math.max(w.count/max*100,4);const isLast=i===arr.length-1;return `<div class="inflow-bar" style="height:${h}%;background:${isLast?'var(--accent)':'#2a2a3a'}" data-tip="${w.week}: ${w.count}"></div>`}).join('')}</div>
-        </div>
-        <div class="sc">
-          <div class="sc-label">Icebox Bank</div>
-          <div class="sc-value">${ice.bank.total}<span style="font-size:12px;color:var(--dim);font-weight:400"> / 40</span></div>
-          ${(()=>{const pct=Math.min(ice.bank.total/40*100,100);const pace=ice.bank.total>=40?'sc-green':ice.bank.total>=30?'sc-orange':'sc-red';const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';return `<div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div>`})()}
-          <div class="icebox-split">
-            <span class="icebox-pill icebox-pill-list">📝 ${ice.bank.listicles} listicles</span>
-            <span class="icebox-pill icebox-pill-other">📰 ${ice.bank.nonListicles} other</span>
-          </div>
-        </div>
-      `;
-      // Store for pipeline section
-      window._iceboxData = ice;
-    } catch(e) { console.error('Icebox:', e); }
-
-    document.getElementById('scRow').innerHTML=`
-      <div class="pulse-card" style="border-color:${pulseColor}30">
-        <div class="pulse-number" style="color:${pulseColor}">${v}</div>
-        <div class="pulse-label">visitors now</div>
-        <div class="pulse-badge" style="background:${pulseBg};color:${pulseColor}">${pulseText}</div>
-      </div>
-      ${mkCard('Visitors',sc.visitors)}
-      ${mkCard('FB Reach',sc.fbReach)}
-      ${mkCard('FB Clicks',sc.fbClicks)}
-      <div class="sc"><div class="sc-label">Articles</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div></div>
-      ${iceboxHtml}
-    `;
-  }catch(e){
+    const ael=document.getElementById('sc-articles');
+    if(ael)ael.innerHTML=`<div class="sc-label">Articles</div><div class="sc-value">${sc.articles.current}<span style="font-size:12px;color:var(--dim);font-weight:400"> / ${sc.articles.target}</span></div><div class="sc-bar"><div class="sc-fill" style="width:${artPct}%;background:${artFill}"></div></div>`;
+  }).catch(e=>{
     console.error('Scorecards:',e);
-    document.querySelectorAll('.sc .sc-value').forEach(el=>{
-      if(el.textContent==='Loading...')el.innerHTML='<span style="color:var(--red);font-size:10px">'+e.message+'</span>';
+    ['sc-visitors','sc-reach','sc-clicks','sc-articles'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el&&el.querySelector('.skeleton'))el.querySelector('.sc-value').innerHTML=`<span style="color:var(--red);font-size:10px">${e.message}</span>`;
     });
-  }
+  });
+
+  // 3. Icebox — independent
+  fetchJSON('/api/icebox').then(ice=>{
+    window._iceboxData=ice;
+    const inflowDelta=pctDelta(ice.thisWeek,ice.lastWeek);
+    const iel=document.getElementById('sc-inflow');
+    if(iel)iel.innerHTML=`<div class="sc-label">Topic Inflow</div><div class="sc-value">${ice.thisWeek}<span style="font-size:12px;color:var(--dim);font-weight:400"> this week</span></div><div class="sc-delta ${inflowDelta.cls}">${inflowDelta.txt} vs last week (${ice.lastWeek})</div><div class="inflow-bars">${ice.weeklyInflow.slice(0,8).reverse().map((w,i,arr)=>{const max=Math.max(...arr.map(x=>x.count),1);const h=Math.max(w.count/max*100,4);const isLast=i===arr.length-1;return `<div class="inflow-bar" style="height:${h}%;background:${isLast?'var(--accent)':'#2a2a3a'}" data-tip="${w.week}: ${w.count}"></div>`}).join('')}</div>`;
+    const bel=document.getElementById('sc-icebox');
+    if(bel){
+      const pct=Math.min(ice.bank.total/40*100,100);const pace=ice.bank.total>=40?'sc-green':ice.bank.total>=30?'sc-orange':'sc-red';const fillColor=pace==='sc-green'?'var(--green)':pace==='sc-orange'?'var(--orange)':'var(--red)';
+      bel.innerHTML=`<div class="sc-label">Icebox Bank</div><div class="sc-value">${ice.bank.total}<span style="font-size:12px;color:var(--dim);font-weight:400"> / 40</span></div><div class="sc-bar"><div class="sc-fill" style="width:${pct}%;background:${fillColor}"></div></div><div class="icebox-split"><span class="icebox-pill icebox-pill-list">📝 ${ice.bank.listicles} listicles</span><span class="icebox-pill icebox-pill-other">📰 ${ice.bank.nonListicles} other</span></div>`;
+    }
+  }).catch(e=>console.error('Icebox:',e));
 }
 
 // ===== WEEK RANGE HELPERS =====
