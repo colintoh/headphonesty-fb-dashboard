@@ -382,9 +382,11 @@ function renderCard(id,label,data,compLabel,isCurrentWeek){
 
 async function loadScorecards(){
   // All scorecard data sources load independently — each card renders as its data arrives
-  const wb=getWeekBounds(weeksAgo);
+  const wb=getSelectedWeek();
   const isCurrentWeek=weeksAgo===0;
-  const daysElapsed=isCurrentWeek?wb.dayOfWeek:7;
+  const sgtNow=nowSGT();
+  const dow=(sgtNow.getUTCDay()||7);
+  const daysElapsed=isCurrentWeek?dow:7;
   const compLabel=isCurrentWeek?`vs prior week (Mon-${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][daysElapsed-1]})`:'vs prior week';
   const wLabel=fmtWeekLabel(wb.start,wb.end);
   document.getElementById('weekLabel').innerHTML=wLabel+(isCurrentWeek?'<span class="current-badge">This Week</span>':'');
