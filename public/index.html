@@ -423,7 +423,7 @@ async function loadScorecards(){
   });
 
   // 3. Icebox — independent
-  fetchJSON('/api/icebox').then(ice=>{
+  fetchJSON('/api/icebox',30000).then(ice=>{
     window._iceboxData=ice;
     const inflowDelta=pctDelta(ice.thisWeek,ice.lastWeek);
     const iel=document.getElementById('sc-inflow');
