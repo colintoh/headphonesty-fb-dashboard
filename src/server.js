@@ -292,24 +292,31 @@ app.get('/api/icebox', async (req, res) => {
       return { id: p.id, title, types, created: p.created_time };
     });
 
-    // Weekly inflow: group recent items by created_time week (Mon-Sun)
+    // Weekly inflow: pre-populate last 12 weeks (Mon-Sun), then count
     const weekMap = {};
+    const sgtNow = nowSGT();
+    const nowDay = sgtNow.getUTCDay() || 7; // 1=Mon..7=Sun
+    const thisMon = new Date(sgtNow);
+    thisMon.setUTCDate(thisMon.getUTCDate() - (nowDay - 1));
+    thisMon.setUTCHours(0, 0, 0, 0);
+    for (let i = 0; i < 12; i++) {
+      const mon = new Date(thisMon);
+      mon.setUTCDate(mon.getUTCDate() - i * 7);
+      weekMap[fmtDate(mon)] = 0;
+    }
+
     recentItems.forEach(p => {
       const created = new Date(p.created_time);
-      // Convert to SGT
       const sgt = new Date(created.getTime() + 8 * 60 * 60 * 1000);
-      const day = sgt.getUTCDay(); // 0=Sun
-      const diffToMon = day === 0 ? 6 : day - 1;
+      const day = sgt.getUTCDay() || 7;
       const mon = new Date(sgt);
-      mon.setUTCDate(mon.getUTCDate() - diffToMon);
-      const weekKey = mon.toISOString().slice(0, 10);
-      weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+      mon.setUTCDate(mon.getUTCDate() - (day - 1));
+      const weekKey = fmtDate(mon);
+      if (weekKey in weekMap) weekMap[weekKey]++;
     });
 
-    // Sort weeks descending, last 12 weeks
     const weeklyInflow = Object.entries(weekMap)
       .sort((a, b) => b[0].localeCompare(a[0]))
-      .slice(0, 12)
       .map(([week, count]) => ({ week, count }));
 
     const thisWeek = weeklyInflow[0]?.count || 0;
