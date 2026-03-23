@@ -261,8 +261,9 @@
   <div class="card">
     <h3>📢 Promotional Posts <span id="promoLabel" style="font-size:10px;color:var(--dim)"></span></h3>
     <div id="promoSummary" style="margin-bottom:6px"></div>
-    <div id="promoBars" style="margin-bottom:8px"></div>
-    <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="promoBody"></tbody></table></div>
+    <div id="promoFreshness" style="margin-bottom:10px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-bottom:6px"><div style="font-size:9px;font-weight:600;color:var(--green);margin-bottom:6px">🟢 FRESH</div><div id="freshBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="freshBody"></tbody></table></div></div>
+    <div style="border-top:1px solid var(--border);padding-top:8px"><div style="font-size:9px;font-weight:600;color:var(--orange);margin-bottom:6px">🔁 RECYCLED</div><div id="recycledBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="recycledBody"></tbody></table></div></div>
   </div>
   <div class="card">
     <h3>🎯 Engagement Posts <span id="engLabel" style="font-size:10px;color:var(--dim)"></span></h3>
@@ -791,6 +792,33 @@ async function loadFacebook(){
     const mixDow=(sgtNow.getUTCDay()||7)-1;
     const periodLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
 
+    function renderImpactBarsAndTable(data, barsId, bodyId){
+      if(!data||!data.formats) return;
+      const fmts=data.formats.filter(f=>f.count>0);
+      if(!fmts.length){document.getElementById(barsId).innerHTML='<div style="font-size:10px;color:var(--dim)">No posts</div>';document.getElementById(bodyId).innerHTML='';return}
+      const maxPct=Math.max(...fmts.flatMap(f=>[f.countPct,f.reachPct]),1);
+      const scale=100/maxPct;
+      let barsHtml='<div style="display:flex;flex-direction:column;gap:8px">';
+      fmts.forEach(f=>{
+        const c=typeColors[f.format]||'#6b7280';
+        const diff=f.reachPct-f.countPct;
+        const arrow=diff>2?'⬆️':diff<-2?'⬇️':'';
+        const diffColor=diff>2?'var(--green)':diff<-2?'var(--red)':'var(--dim)';
+        barsHtml+=`<div style="display:grid;grid-template-columns:55px 1fr 36px;gap:4px;align-items:center">`;
+        barsHtml+=`<div style="font-size:10px;font-weight:600"><span class="dot" style="background:${c}"></span>${f.format}</div>`;
+        barsHtml+=`<div style="display:flex;flex-direction:column;gap:2px">`;
+        barsHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Posts</div><div style="height:8px;border-radius:3px;background:${c};opacity:0.4;width:${f.countPct*scale}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${f.countPct}%</span></div>`;
+        barsHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Reach</div><div style="height:8px;border-radius:3px;background:${c};width:${f.reachPct*scale}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${f.reachPct}%</span></div>`;
+        barsHtml+=`</div><div style="font-size:9px;color:${diffColor};font-weight:600;text-align:right">${arrow}${diff>0?'+':''}${diff}%</div></div>`;
+      });
+      barsHtml+='</div>';
+      document.getElementById(barsId).innerHTML=barsHtml;
+      document.getElementById(bodyId).innerHTML=fmts.map(f=>{
+        const c=typeColors[f.format]||'#6b7280';
+        return `<tr><td><span class="dot" style="background:${c}"></span> ${f.format}</td><td>${f.count} <span style="color:var(--dim)">(${f.countPct}%)</span></td><td>${fmt(f.totalReach)}</td><td style="font-weight:600">${fmt(f.medianReach)}</td><td>${f.engRate}%</td></tr>`;
+      }).join('');
+    }
+
     function renderImpactPanel(data, barsId, bodyId, summaryId, labelId, extraHtml){
       document.getElementById(labelId).textContent=`(${periodLabel})`;
       document.getElementById(summaryId).innerHTML=`<div style="display:flex;gap:12px;font-size:11px"><span><b>${data.totalPosts}</b> posts <span style="color:var(--dim)">(${data.countPctOfAll}%)</span></span><span><b>${fmt(data.totalReach)}</b> reach <span style="color:var(--dim)">(${data.reachPctOfAll}%)</span></span>${extraHtml||''}</div>`;
@@ -818,10 +846,27 @@ async function loadFacebook(){
       }).join('');
     }
     const p=impact.promotional;
-    const freshPct=p.totalPosts>0?Math.round(p.fresh.count/p.totalPosts*100):0;
-    const recycledPct=100-freshPct;
-    renderImpactPanel(p,'promoBars','promoBody','promoSummary','promoLabel',
-      `<span style="color:var(--green)">🟢 ${p.fresh.count} fresh</span><span style="color:var(--orange)">🔁 ${p.recycled.count} recycled</span>`);
+    // Promo summary
+    document.getElementById('promoLabel').textContent=`(${periodLabel})`;
+    document.getElementById('promoSummary').innerHTML=`<div style="display:flex;gap:12px;font-size:11px"><span><b>${p.totalPosts}</b> posts <span style="color:var(--dim)">(${p.countPctOfAll}%)</span></span><span><b>${fmt(p.totalReach)}</b> reach <span style="color:var(--dim)">(${p.reachPctOfAll}%)</span></span></div>`;
+
+    // Fresh vs Recycled comparison bars
+    const freshPostsPct=p.totalPosts>0?Math.round(p.fresh.count/p.totalPosts*100):0;
+    const recycledPostsPct=100-freshPostsPct;
+    const promoTotalReach=p.totalReach||1;
+    const freshReachPct=Math.round((p.fresh.reach||0)/promoTotalReach*100);
+    const recycledReachPct=100-freshReachPct;
+    let fBar='<div style="display:flex;flex-direction:column;gap:4px">';
+    fBar+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:9px;width:60px;flex-shrink:0;color:var(--green);font-weight:600">🟢 Fresh</div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Posts</div><div style="height:8px;border-radius:3px;background:var(--green);opacity:0.4;width:${freshPostsPct}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${p.fresh.count} (${freshPostsPct}%)</span></div><div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Reach</div><div style="height:8px;border-radius:3px;background:var(--green);width:${freshReachPct}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${fmt(p.fresh.reach)} (${freshReachPct}%)</span></div></div></div>`;
+    fBar+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:9px;width:60px;flex-shrink:0;color:var(--orange);font-weight:600">🔁 Recycled</div><div style="display:flex;flex-direction:column;gap:2px;flex:1"><div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Posts</div><div style="height:8px;border-radius:3px;background:var(--orange);opacity:0.4;width:${recycledPostsPct}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${p.recycled.count} (${recycledPostsPct}%)</span></div><div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Reach</div><div style="height:8px;border-radius:3px;background:var(--orange);width:${recycledReachPct}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${fmt(p.recycled.reach)} (${recycledReachPct}%)</span></div></div></div>`;
+    fBar+='</div>';
+    document.getElementById('promoFreshness').innerHTML=fBar;
+
+    // Fresh by format
+    renderImpactBarsAndTable(p.fresh,'freshBars','freshBody');
+    // Recycled by format
+    renderImpactBarsAndTable(p.recycled,'recycledBars','recycledBody');
+    // Engagement panel
     renderImpactPanel(impact.engagement,'engBars','engBody','engSummary','engLabel');
   }
 

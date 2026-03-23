@@ -446,9 +446,16 @@ app.get('/api/content-impact', (req, res) => {
     const promoFresh = promo.filter(p => p.post_freshness === 'fresh');
     const promoRecycled = promo.filter(p => p.post_freshness === 'recycled');
 
+    const freshReach = promoFresh.reduce((s,p)=>s+(p.reach||0),0);
+    const recycledReach = promoRecycled.reduce((s,p)=>s+(p.reach||0),0);
+
     res.json({
       weekRange: wb, totalPosts: allCount, totalReach: allReach,
-      promotional: { ...computeStats(promo, allCount, allReach), fresh: { count: promoFresh.length, reach: promoFresh.reduce((s,p)=>s+(p.reach||0),0) }, recycled: { count: promoRecycled.length, reach: promoRecycled.reduce((s,p)=>s+(p.reach||0),0) } },
+      promotional: {
+        ...computeStats(promo, allCount, allReach),
+        fresh: { count: promoFresh.length, reach: freshReach, ...computeStats(promoFresh, promo.length, promo.reduce((s,p)=>s+(p.reach||0),0)) },
+        recycled: { count: promoRecycled.length, reach: recycledReach, ...computeStats(promoRecycled, promo.length, promo.reduce((s,p)=>s+(p.reach||0),0)) }
+      },
       engagement: computeStats(engage, allCount, allReach)
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
