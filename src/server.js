@@ -384,7 +384,7 @@ app.get('/api/top-posts', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    res.json(db.prepare(`SELECT id, ${SGT_DAY_EXPR} as day, post_type, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ORDER BY reach DESC LIMIT 10`).all(start, end));
+    res.json(db.prepare(`SELECT id, ${SGT_DAY_EXPR} as day, post_type, COALESCE(post_purpose,'') as purpose, COALESCE(post_freshness,'') as freshness, reach, shares, comments, link_url, substr(message,1,100) as msg FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ORDER BY reach DESC LIMIT 10`).all(start, end));
   } finally { db.close(); }
 });
 
