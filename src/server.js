@@ -449,12 +449,39 @@ app.get('/api/content-impact', (req, res) => {
     const freshReach = promoFresh.reduce((s,p)=>s+(p.reach||0),0);
     const recycledReach = promoRecycled.reduce((s,p)=>s+(p.reach||0),0);
 
+    // Combined freshness×format breakdown (all sum to 100% of promo)
+    const promoTotal = promo.length;
+    const promoReach = promo.reduce((s,p)=>s+(p.reach||0),0);
+    const comboMap = {};
+    promo.forEach(p => {
+      const f = ['reel','story','meme','status'].includes(p.post_type) ? p.post_type : 'other';
+      const key = `${p.post_freshness||'fresh'}_${f}`;
+      if (!comboMap[key]) comboMap[key] = { reaches: [], totalReach: 0, totalShares: 0, totalComments: 0, freshness: p.post_freshness||'fresh', format: f };
+      comboMap[key].reaches.push(p.reach||0);
+      comboMap[key].totalReach += (p.reach||0);
+      comboMap[key].totalShares += (p.shares||0);
+      comboMap[key].totalComments += (p.comments||0);
+    });
+    const combos = Object.values(comboMap).map(d => {
+      const sorted = d.reaches.sort((a,b)=>a-b);
+      const median = sorted.length===0?0:sorted.length%2?sorted[Math.floor(sorted.length/2)]:Math.round((sorted[Math.floor(sorted.length/2)-1]+sorted[Math.floor(sorted.length/2)])/2);
+      const engRate = d.totalReach>0?((d.totalShares+d.totalComments)/d.totalReach*100):0;
+      return {
+        freshness: d.freshness, format: d.format,
+        count: sorted.length, countPct: promoTotal>0?Math.round(sorted.length/promoTotal*100):0,
+        totalReach: d.totalReach, reachPct: promoReach>0?Math.round(d.totalReach/promoReach*100):0,
+        medianReach: median, totalShares: d.totalShares, totalComments: d.totalComments,
+        engRate: Math.round(engRate*100)/100
+      };
+    }).sort((a,b)=>b.medianReach-a.medianReach);
+
     res.json({
       weekRange: wb, totalPosts: allCount, totalReach: allReach,
       promotional: {
         ...computeStats(promo, allCount, allReach),
-        fresh: { count: promoFresh.length, reach: freshReach, ...computeStats(promoFresh, promo.length, promo.reduce((s,p)=>s+(p.reach||0),0)) },
-        recycled: { count: promoRecycled.length, reach: recycledReach, ...computeStats(promoRecycled, promo.length, promo.reduce((s,p)=>s+(p.reach||0),0)) }
+        fresh: { count: promoFresh.length, reach: freshReach },
+        recycled: { count: promoRecycled.length, reach: recycledReach },
+        combos
       },
       engagement: computeStats(engage, allCount, allReach)
     });

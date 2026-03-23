@@ -262,8 +262,7 @@
     <h3>📢 Promotional Posts <span id="promoLabel" style="font-size:10px;color:var(--dim)"></span></h3>
     <div id="promoSummary" style="margin-bottom:6px"></div>
     <div id="promoFreshness" style="margin-bottom:10px"></div>
-    <div style="border-top:1px solid var(--border);padding-top:8px;margin-bottom:6px"><div style="font-size:9px;font-weight:600;color:var(--green);margin-bottom:6px">🟢 FRESH</div><div id="freshBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="freshBody"></tbody></table></div></div>
-    <div style="border-top:1px solid var(--border);padding-top:8px"><div style="font-size:9px;font-weight:600;color:var(--orange);margin-bottom:6px">🔁 RECYCLED</div><div id="recycledBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="recycledBody"></tbody></table></div></div>
+    <div style="border-top:1px solid var(--border);padding-top:8px"><div style="font-size:9px;font-weight:600;color:var(--dim);margin-bottom:6px">FORMAT × FRESHNESS</div><div id="promoDetailBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Type</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="promoDetailBody"></tbody></table></div></div>
   </div>
   <div class="card">
     <h3>🎯 Engagement Posts <span id="engLabel" style="font-size:10px;color:var(--dim)"></span></h3>
@@ -862,10 +861,37 @@ async function loadFacebook(){
     fBar+='</div>';
     document.getElementById('promoFreshness').innerHTML=fBar;
 
-    // Fresh by format
-    renderImpactBarsAndTable(p.fresh,'freshBars','freshBody');
-    // Recycled by format
-    renderImpactBarsAndTable(p.recycled,'recycledBars','recycledBody');
+    // Combined freshness×format
+    if(p.combos&&p.combos.length){
+      const combos=p.combos.filter(c=>c.count>0);
+      const maxPct=Math.max(...combos.flatMap(c=>[c.countPct,c.reachPct]),1);
+      const scale=100/maxPct;
+      let cbHtml='<div style="display:flex;flex-direction:column;gap:8px">';
+      combos.forEach(c=>{
+        const isFresh=c.freshness==='fresh';
+        const fColor=isFresh?'var(--green)':'var(--orange)';
+        const fIcon=isFresh?'🟢':'🔁';
+        const barColor=typeColors[c.format]||'#6b7280';
+        const diff=c.reachPct-c.countPct;
+        const arrow=diff>2?'⬆️':diff<-2?'⬇️':'';
+        const diffColor=diff>2?'var(--green)':diff<-2?'var(--red)':'var(--dim)';
+        cbHtml+=`<div style="display:grid;grid-template-columns:90px 1fr 36px;gap:4px;align-items:center">`;
+        cbHtml+=`<div style="font-size:9px;font-weight:600;display:flex;align-items:center;gap:3px"><span style="font-size:7px">${fIcon}</span><span style="color:${fColor}">${c.freshness}</span> <span class="dot" style="background:${barColor}"></span>${c.format}</div>`;
+        cbHtml+=`<div style="display:flex;flex-direction:column;gap:2px">`;
+        cbHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Posts</div><div style="height:8px;border-radius:3px;background:${barColor};opacity:0.4;width:${c.countPct*scale}%;min-width:2px;border-left:2px solid ${fColor}"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${c.countPct}%</span></div>`;
+        cbHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Reach</div><div style="height:8px;border-radius:3px;background:${barColor};width:${c.reachPct*scale}%;min-width:2px;border-left:2px solid ${fColor}"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${c.reachPct}%</span></div>`;
+        cbHtml+=`</div><div style="font-size:9px;color:${diffColor};font-weight:600;text-align:right">${arrow}${diff>0?'+':''}${diff}%</div></div>`;
+      });
+      cbHtml+='</div>';
+      document.getElementById('promoDetailBars').innerHTML=cbHtml;
+      document.getElementById('promoDetailBody').innerHTML=combos.map(c=>{
+        const isFresh=c.freshness==='fresh';
+        const fColor=isFresh?'#22c55e':'#f97316';
+        const fIcon=isFresh?'🟢':'🔁';
+        const barColor=typeColors[c.format]||'#6b7280';
+        return `<tr><td><span style="color:${fColor};font-size:8px;font-weight:700">${isFresh?'F':'R'}</span> <span class="dot" style="background:${barColor}"></span>${c.format}</td><td>${c.count} <span style="color:var(--dim)">(${c.countPct}%)</span></td><td>${fmt(c.totalReach)}</td><td style="font-weight:600">${fmt(c.medianReach)}</td><td>${c.engRate}%</td></tr>`;
+      }).join('');
+    }
     // Engagement panel
     renderImpactPanel(impact.engagement,'engBars','engBody','engSummary','engLabel');
   }
