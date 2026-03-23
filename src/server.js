@@ -405,45 +405,52 @@ app.get('/api/content-impact', (req, res) => {
   const db = getDb();
   if (!db) return res.status(500).json({ error: 'DB not available' });
   try {
-    // Get all posts for the week grouped by type
-    const posts = db.prepare(`SELECT post_type, reach, shares, comments FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ORDER BY post_type, reach`).all(wb.start, currentEnd);
+    const posts = db.prepare(`SELECT post_type, COALESCE(post_purpose,'engagement') as purpose, post_freshness, reach, shares, comments FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ?`).all(wb.start, currentEnd);
 
-    // Group by type and compute stats
-    const byType = {};
-    let totalReach = 0;
-    let totalPosts = 0;
-    posts.forEach(p => {
-      if (!byType[p.post_type]) byType[p.post_type] = { posts: [], totalReach: 0, totalShares: 0, totalComments: 0 };
-      byType[p.post_type].posts.push(p.reach);
-      byType[p.post_type].totalReach += (p.reach || 0);
-      byType[p.post_type].totalShares += (p.shares || 0);
-      byType[p.post_type].totalComments += (p.comments || 0);
-      totalReach += (p.reach || 0);
-      totalPosts++;
+    function computeStats(filtered, allCount, allReach) {
+      const byFormat = {};
+      const allFormats = ['reel', 'story', 'meme', 'status', 'other'];
+      allFormats.forEach(f => { byFormat[f] = { reaches: [], totalReach: 0, totalShares: 0, totalComments: 0 }; });
+      let totalReach = 0, totalPosts = 0;
+      filtered.forEach(p => {
+        const f = allFormats.includes(p.post_type) ? p.post_type : 'other';
+        byFormat[f].reaches.push(p.reach || 0);
+        byFormat[f].totalReach += (p.reach || 0);
+        byFormat[f].totalShares += (p.shares || 0);
+        byFormat[f].totalComments += (p.comments || 0);
+        totalReach += (p.reach || 0);
+        totalPosts++;
+      });
+      const formats = Object.entries(byFormat).map(([fmt, d]) => {
+        const sorted = d.reaches.sort((a, b) => a - b);
+        const median = sorted.length === 0 ? 0 : sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : Math.round((sorted[Math.floor(sorted.length / 2) - 1] + sorted[Math.floor(sorted.length / 2)]) / 2);
+        const engRate = d.totalReach > 0 ? ((d.totalShares + d.totalComments) / d.totalReach * 100) : 0;
+        return {
+          format: fmt, count: sorted.length,
+          countPct: totalPosts > 0 ? Math.round(sorted.length / totalPosts * 100) : 0,
+          totalReach: d.totalReach,
+          reachPct: totalReach > 0 ? Math.round(d.totalReach / totalReach * 100) : 0,
+          medianReach: median, totalShares: d.totalShares, totalComments: d.totalComments,
+          engRate: Math.round(engRate * 100) / 100
+        };
+      }).sort((a, b) => b.medianReach - a.medianReach);
+      return { totalPosts, totalReach, countPctOfAll: allCount > 0 ? Math.round(totalPosts / allCount * 100) : 0, reachPctOfAll: allReach > 0 ? Math.round(totalReach / allReach * 100) : 0, formats };
+    }
+
+    const allCount = posts.length;
+    const allReach = posts.reduce((s, p) => s + (p.reach || 0), 0);
+    const promo = posts.filter(p => p.purpose === 'promotional');
+    const engage = posts.filter(p => p.purpose !== 'promotional');
+
+    // Freshness split for promotional
+    const promoFresh = promo.filter(p => p.post_freshness === 'fresh');
+    const promoRecycled = promo.filter(p => p.post_freshness === 'recycled');
+
+    res.json({
+      weekRange: wb, totalPosts: allCount, totalReach: allReach,
+      promotional: { ...computeStats(promo, allCount, allReach), fresh: { count: promoFresh.length, reach: promoFresh.reduce((s,p)=>s+(p.reach||0),0) }, recycled: { count: promoRecycled.length, reach: promoRecycled.reduce((s,p)=>s+(p.reach||0),0) } },
+      engagement: computeStats(engage, allCount, allReach)
     });
-
-    // Ensure all known types are present
-    const allTypes = ['fresh', 'meme', 'story', 'status', 'reel', 'recycled', 'other'];
-    allTypes.forEach(t => { if (!byType[t]) byType[t] = { posts: [], totalReach: 0, totalShares: 0, totalComments: 0 }; });
-
-    const result = Object.entries(byType).map(([type, d]) => {
-      const sorted = d.posts.sort((a, b) => a - b);
-      const median = sorted.length === 0 ? 0 : sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : Math.round((sorted[Math.floor(sorted.length / 2) - 1] + sorted[Math.floor(sorted.length / 2)]) / 2);
-      const engRate = d.totalReach > 0 ? ((d.totalShares + d.totalComments) / d.totalReach * 100) : 0;
-      return {
-        type,
-        count: sorted.length,
-        countPct: totalPosts > 0 ? Math.round(sorted.length / totalPosts * 100) : 0,
-        totalReach: d.totalReach,
-        reachPct: totalReach > 0 ? Math.round(d.totalReach / totalReach * 100) : 0,
-        medianReach: median,
-        totalShares: d.totalShares,
-        totalComments: d.totalComments,
-        engRate: Math.round(engRate * 100) / 100
-      };
-    }).sort((a, b) => b.medianReach - a.medianReach);
-
-    res.json({ weekRange: wb, totalPosts, totalReach, types: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
   finally { db.close(); }
 });

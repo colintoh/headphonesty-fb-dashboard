@@ -257,17 +257,21 @@
   <div class="card"><h3>Daily Reach (30d)</h3><canvas id="reachChart"></canvas></div>
   <div class="card"><h3>Engagement — Comments & Shares</h3><canvas id="engagementChart"></canvas></div>
 </div>
-<div class="grid grid-3">
+<div class="grid grid-2">
   <div class="card">
-    <h3>📊 Content Impact <span id="impactPeriod" style="font-size:11px;color:var(--dim)">(This Week)</span></h3>
-    <div id="impactBars" style="margin-bottom:8px"></div>
-    <div style="overflow-x:auto">
-      <table class="data-table" style="font-size:10px">
-        <thead><tr><th>Type</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Shr</th><th>Eng%</th></tr></thead>
-        <tbody id="impactBody"></tbody>
-      </table>
-    </div>
+    <h3>📢 Promotional Posts <span id="promoLabel" style="font-size:10px;color:var(--dim)"></span></h3>
+    <div id="promoSummary" style="margin-bottom:6px"></div>
+    <div id="promoBars" style="margin-bottom:8px"></div>
+    <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="promoBody"></tbody></table></div>
   </div>
+  <div class="card">
+    <h3>🎯 Engagement Posts <span id="engLabel" style="font-size:10px;color:var(--dim)"></span></h3>
+    <div id="engSummary" style="margin-bottom:6px"></div>
+    <div id="engBars" style="margin-bottom:8px"></div>
+    <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="engBody"></tbody></table></div>
+  </div>
+</div>
+<div class="grid grid-2">
   <div class="card">
     <h3>Posting Slots (3 Weeks)</h3>
     <div id="slotGrid"></div>
@@ -780,41 +784,45 @@ async function loadFacebook(){
   if(engagementChart)engagementChart.destroy();
   engagementChart=new Chart(ctx4,{type:'bar',data:{labels:daily.map(d=>d.day.slice(5)),datasets:[{label:'Shares',data:daily.map(d=>d.total_shares),backgroundColor:'#22c55e',borderRadius:3},{label:'Comments',data:daily.map(d=>d.total_comments),backgroundColor:'#3b82f6',borderRadius:3}]},options:{responsive:true,plugins:{legend:{labels:{color:'#6b6b80',boxWidth:10}}},scales:{y:{ticks:{color:'#6b6b80'},grid:{color:'#1e1e2e'}},x:{ticks:{color:'#6b6b80',maxTicksLimit:8},grid:{display:false}}}}});
 
-  // Content Impact
-  if(impact&&impact.types){
+  // Content Impact — two panels (promotional + engagement)
+  if(impact&&impact.promotional){
     const mixDayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const sgtNow=nowSGT();
     const mixDow=(sgtNow.getUTCDay()||7)-1;
-    const mixLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
-    document.getElementById('impactPeriod').textContent=`(${mixLabel})`;
+    const periodLabel=weeksAgo===0?`Mon–${mixDayNames[mixDow]}`:`Full Week`;
 
-    // Paired horizontal bars: Posts% vs Reach% per type
-    const maxPct=Math.max(...impact.types.flatMap(t=>[t.countPct,t.reachPct]),1);
-    let barsHtml='<div style="display:flex;flex-direction:column;gap:10px">';
-    impact.types.forEach(t=>{
-      const c=typeColors[t.type]||'#6b7280';
-      const diff=t.reachPct-t.countPct;
-      const arrow=diff>2?'⬆️':diff<-2?'⬇️':'';
-      const diffColor=diff>2?'var(--green)':diff<-2?'var(--red)':'var(--dim)';
-      const scale=100/maxPct; // scale bars so largest fills full width
-      barsHtml+=`<div style="display:grid;grid-template-columns:65px 1fr 40px;gap:6px;align-items:center">`;
-      barsHtml+=`<div style="font-size:11px;font-weight:600"><span class="dot" style="background:${c}"></span>${t.type}</div>`;
-      barsHtml+=`<div style="display:flex;flex-direction:column;gap:2px">`;
-      barsHtml+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:var(--dim);width:32px;flex-shrink:0">Posts</div><div style="height:10px;border-radius:3px;background:${c};opacity:0.4;width:${t.countPct*scale}%;min-width:2px;transition:width 0.3s"></div><span style="font-size:9px;color:var(--dim);flex-shrink:0">${t.countPct}%</span></div>`;
-      barsHtml+=`<div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:var(--dim);width:32px;flex-shrink:0">Reach</div><div style="height:10px;border-radius:3px;background:${c};width:${t.reachPct*scale}%;min-width:2px;transition:width 0.3s"></div><span style="font-size:9px;color:var(--dim);flex-shrink:0">${t.reachPct}%</span></div>`;
-      barsHtml+=`</div>`;
-      barsHtml+=`<div style="font-size:10px;color:${diffColor};font-weight:600;text-align:right">${arrow} ${diff>0?'+':''}${diff}%</div>`;
-      barsHtml+=`</div>`;
-    });
-    barsHtml+='</div>';
-    document.getElementById('impactBars').innerHTML=barsHtml;
-
-    // Impact table
-    document.getElementById('impactBody').innerHTML=impact.types.map(t=>{
-      const color=typeColors[t.type]||'#6b7280';
-      const mismatch=t.reachPct<t.countPct?'⬇️':'⬆️';
-      return `<tr><td><span class="dot" style="background:${color}"></span> ${t.type}</td><td>${t.count} <span style="color:var(--dim)">(${t.countPct}%)</span></td><td>${fmt(t.totalReach)} <span style="color:var(--dim)">(${t.reachPct}%)</span></td><td style="font-weight:600">${fmt(t.medianReach)}</td><td>${t.totalShares}</td><td>${t.engRate}%</td></tr>`;
-    }).join('');
+    function renderImpactPanel(data, barsId, bodyId, summaryId, labelId, extraHtml){
+      document.getElementById(labelId).textContent=`(${periodLabel})`;
+      document.getElementById(summaryId).innerHTML=`<div style="display:flex;gap:12px;font-size:11px"><span><b>${data.totalPosts}</b> posts <span style="color:var(--dim)">(${data.countPctOfAll}%)</span></span><span><b>${fmt(data.totalReach)}</b> reach <span style="color:var(--dim)">(${data.reachPctOfAll}%)</span></span>${extraHtml||''}</div>`;
+      const fmts=data.formats.filter(f=>f.count>0);
+      const maxPct=Math.max(...fmts.flatMap(f=>[f.countPct,f.reachPct]),1);
+      const scale=100/maxPct;
+      let barsHtml='<div style="display:flex;flex-direction:column;gap:8px">';
+      fmts.forEach(f=>{
+        const c=typeColors[f.format]||'#6b7280';
+        const diff=f.reachPct-f.countPct;
+        const arrow=diff>2?'⬆️':diff<-2?'⬇️':'';
+        const diffColor=diff>2?'var(--green)':diff<-2?'var(--red)':'var(--dim)';
+        barsHtml+=`<div style="display:grid;grid-template-columns:55px 1fr 36px;gap:4px;align-items:center">`;
+        barsHtml+=`<div style="font-size:10px;font-weight:600"><span class="dot" style="background:${c}"></span>${f.format}</div>`;
+        barsHtml+=`<div style="display:flex;flex-direction:column;gap:2px">`;
+        barsHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Posts</div><div style="height:8px;border-radius:3px;background:${c};opacity:0.4;width:${f.countPct*scale}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${f.countPct}%</span></div>`;
+        barsHtml+=`<div style="display:flex;align-items:center;gap:4px"><div style="font-size:7px;color:var(--dim);width:28px;flex-shrink:0">Reach</div><div style="height:8px;border-radius:3px;background:${c};width:${f.reachPct*scale}%;min-width:2px"></div><span style="font-size:8px;color:var(--dim);flex-shrink:0">${f.reachPct}%</span></div>`;
+        barsHtml+=`</div><div style="font-size:9px;color:${diffColor};font-weight:600;text-align:right">${arrow}${diff>0?'+':''}${diff}%</div></div>`;
+      });
+      barsHtml+='</div>';
+      document.getElementById(barsId).innerHTML=barsHtml;
+      document.getElementById(bodyId).innerHTML=fmts.map(f=>{
+        const c=typeColors[f.format]||'#6b7280';
+        return `<tr><td><span class="dot" style="background:${c}"></span> ${f.format}</td><td>${f.count} <span style="color:var(--dim)">(${f.countPct}%)</span></td><td>${fmt(f.totalReach)}</td><td style="font-weight:600">${fmt(f.medianReach)}</td><td>${f.engRate}%</td></tr>`;
+      }).join('');
+    }
+    const p=impact.promotional;
+    const freshPct=p.totalPosts>0?Math.round(p.fresh.count/p.totalPosts*100):0;
+    const recycledPct=100-freshPct;
+    renderImpactPanel(p,'promoBars','promoBody','promoSummary','promoLabel',
+      `<span style="color:var(--green)">🟢 ${p.fresh.count} fresh</span><span style="color:var(--orange)">🔁 ${p.recycled.count} recycled</span>`);
+    renderImpactPanel(impact.engagement,'engBars','engBody','engSummary','engLabel');
   }
 
   // Slots — 3 weeks (selected + 2 prior), grouped by week rows
