@@ -473,7 +473,7 @@ app.get('/api/content-impact', (req, res) => {
         medianReach: median, totalShares: d.totalShares, totalComments: d.totalComments,
         engRate: Math.round(engRate*100)/100
       };
-    }).sort((a,b)=>b.medianReach-a.medianReach);
+    }).sort((a,b)=>b.totalReach-a.totalReach);
 
     res.json({
       weekRange: wb, totalPosts: allCount, totalReach: allReach,

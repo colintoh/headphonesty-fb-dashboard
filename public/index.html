@@ -262,7 +262,7 @@
     <h3>📢 Promotional Posts <span id="promoLabel" style="font-size:10px;color:var(--dim)"></span></h3>
     <div id="promoSummary" style="margin-bottom:6px"></div>
     <div id="promoFreshness" style="margin-bottom:10px"></div>
-    <div style="border-top:1px solid var(--border);padding-top:8px"><div style="font-size:9px;font-weight:600;color:var(--dim);margin-bottom:6px">FORMAT × FRESHNESS</div><div id="promoDetailBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Type</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="promoDetailBody"></tbody></table></div></div>
+    <div style="border-top:1px solid var(--border);padding-top:8px"><div style="font-size:9px;font-weight:600;color:var(--dim);margin-bottom:6px">FORMAT × FRESHNESS</div><div id="promoDetailBars" style="margin-bottom:6px"></div><div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Type</th><th class="sortable" onclick="sortPromoTable('count')" style="cursor:pointer">Posts ⇅</th><th class="sortable" onclick="sortPromoTable('totalReach')" style="cursor:pointer">Reach ⇅</th><th class="sortable" onclick="sortPromoTable('medianReach')" style="cursor:pointer">Med. ⇅</th><th class="sortable" onclick="sortPromoTable('engRate')" style="cursor:pointer">Eng% ⇅</th></tr></thead><tbody id="promoDetailBody"></tbody></table></div></div>
   </div>
   <div class="card">
     <h3>🎯 Engagement Posts <span id="engLabel" style="font-size:10px;color:var(--dim)"></span></h3>
@@ -862,8 +862,13 @@ async function loadFacebook(){
     document.getElementById('promoFreshness').innerHTML=fBar;
 
     // Combined freshness×format
+    window._promoCombos=[];
+    window._promoSortCol='totalReach';
+    window._promoSortAsc=false;
     if(p.combos&&p.combos.length){
-      const combos=p.combos.filter(c=>c.count>0);
+      window._promoCombos=p.combos.filter(c=>c.count>0);
+      // Bars sorted by totalReach (always)
+      const combos=[...window._promoCombos].sort((a,b)=>b.totalReach-a.totalReach);
       const maxPct=Math.max(...combos.flatMap(c=>[c.countPct,c.reachPct]),1);
       const scale=100/maxPct;
       let cbHtml='<div style="display:flex;flex-direction:column;gap:8px">';
@@ -884,13 +889,7 @@ async function loadFacebook(){
       });
       cbHtml+='</div>';
       document.getElementById('promoDetailBars').innerHTML=cbHtml;
-      document.getElementById('promoDetailBody').innerHTML=combos.map(c=>{
-        const isFresh=c.freshness==='fresh';
-        const fColor=isFresh?'#22c55e':'#f97316';
-        const fIcon=isFresh?'🟢':'🔁';
-        const barColor=typeColors[c.format]||'#6b7280';
-        return `<tr><td><span style="color:${fColor};font-size:8px;font-weight:700">${isFresh?'F':'R'}</span> <span class="dot" style="background:${barColor}"></span>${c.format}</td><td>${c.count} <span style="color:var(--dim)">(${c.countPct}%)</span></td><td>${fmt(c.totalReach)}</td><td style="font-weight:600">${fmt(c.medianReach)}</td><td>${c.engRate}%</td></tr>`;
-      }).join('');
+      sortPromoTable('totalReach');
     }
     // Engagement panel
     renderImpactPanel(impact.engagement,'engBars','engBody','engSummary','engLabel');
@@ -1016,6 +1015,27 @@ async function loadPipeline(){
   html += '</tbody></table></div>';
 
   document.getElementById('iceboxDetail').innerHTML = html;
+}
+
+function sortPromoTable(col){
+  if(!window._promoCombos||!window._promoCombos.length)return;
+  if(window._promoSortCol===col){window._promoSortAsc=!window._promoSortAsc}else{window._promoSortCol=col;window._promoSortAsc=false}
+  const sorted=[...window._promoCombos].sort((a,b)=>window._promoSortAsc?a[col]-b[col]:b[col]-a[col]);
+  const arrow=col;
+  document.getElementById('promoDetailBody').innerHTML=sorted.map(c=>{
+    const isFresh=c.freshness==='fresh';
+    const fColor=isFresh?'#22c55e':'#f97316';
+    const barColor=typeColors[c.format]||'#6b7280';
+    return `<tr><td><span style="color:${fColor};font-size:8px;font-weight:700">${isFresh?'F':'R'}</span> <span class="dot" style="background:${barColor}"></span>${c.format}</td><td>${c.count} <span style="color:var(--dim)">(${c.countPct}%)</span></td><td>${fmt(c.totalReach)}</td><td style="font-weight:600">${fmt(c.medianReach)}</td><td>${c.engRate}%</td></tr>`;
+  }).join('');
+  // Update header arrows
+  document.querySelectorAll('#promoDetailBody').forEach(()=>{});
+  const headers=document.querySelectorAll('.sortable');
+  const colMap={count:'Posts',totalReach:'Reach',medianReach:'Med.',engRate:'Eng%'};
+  headers.forEach(h=>{
+    const label=Object.entries(colMap).find(([k,v])=>h.textContent.replace(/[⇅↑↓]/g,'').trim()===v);
+    if(label){h.textContent=label[1]+(label[0]===col?(window._promoSortAsc?' ↑':' ↓'):' ⇅')}
+  });
 }
 
 async function refreshAll(){
