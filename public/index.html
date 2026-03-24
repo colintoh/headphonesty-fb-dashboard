@@ -1007,9 +1007,11 @@ async function loadPipeline(){
       const cls = t === 'List' ? 'type-meme' : t === 'Feature' ? 'type-fresh' : t === 'Rumor' ? 'type-reel' : t === 'Gear Test' ? 'type-story' : t === 'Refresh' ? 'type-status' : 'type-other';
       return `<span class="type-badge ${cls}">${t}</span>`;
     }).join(' ') : '<span class="type-badge type-other">untyped</span>';
-    const title = (item.title || 'Untitled').slice(0, 60);
+    const rawTitle = (item.title || 'Untitled');
+    const safeTitle = rawTitle.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const displayTitle = rawTitle.replace(/</g,'&lt;').replace(/>/g,'&gt;').slice(0, 60);
     const added = item.created.slice(0, 10);
-    html += `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.title}">${title}</td><td>${badge}</td><td style="font-size:10px;color:var(--dim);white-space:nowrap">${added}</td></tr>`;
+    html += `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${safeTitle}">${displayTitle}</td><td>${badge}</td><td style="font-size:10px;color:var(--dim);white-space:nowrap">${added}</td></tr>`;
   });
   html += '</tbody></table></div>';
 
