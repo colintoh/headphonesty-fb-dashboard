@@ -863,7 +863,7 @@ async function loadFacebook(){
 
     // Combined freshness×format
     window._promoCombos=[];
-    window._promoSortCol='totalReach';
+    window._promoSortCol=null;
     window._promoSortAsc=false;
     if(p.combos&&p.combos.length){
       window._promoCombos=p.combos.filter(c=>c.count>0);
