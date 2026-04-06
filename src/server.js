@@ -489,6 +489,32 @@ app.get('/api/content-impact', (req, res) => {
   finally { db.close(); }
 });
 
+// Posts by format type (for engagement format detail popup)
+app.get('/api/posts-by-type', (req, res) => {
+  const type = req.query.type;
+  const purpose = req.query.purpose || 'engagement';
+  if (!type) return res.status(400).json({ error: 'type parameter required' });
+  const weeksAgo = parseInt(req.query.weeksAgo) || 0;
+  const wb = getWeekBounds(weeksAgo);
+  const currentEnd = weeksAgo === 0 ? fmtDate(nowSGT()) : wb.end;
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: 'DB not available' });
+  try {
+    const purposeFilter = purpose === 'promotional'
+      ? `AND COALESCE(post_purpose,'engagement') = 'promotional'`
+      : `AND COALESCE(post_purpose,'engagement') != 'promotional'`;
+    const rows = db.prepare(`
+      SELECT id, ${SGT_DAY_EXPR} as day, post_type, reach, shares, comments, link_url, substr(message,1,120) as msg,
+        printf('%02d:%02d', (CAST(substr(created_at,12,2) AS INTEGER)+8)%24, CAST(substr(created_at,15,2) AS INTEGER)) as time_sgt
+      FROM posts
+      WHERE post_type = ? AND ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? ${purposeFilter}
+      ORDER BY reach DESC
+    `).all(type, wb.start, currentEnd);
+    res.json({ type, purpose, weekRange: wb, posts: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+  finally { db.close(); }
+});
+
 // Posts detail by day (for distribution calendar popup)
 app.get('/api/fb-posts-detail', (req, res) => {
   const { start, end } = getDateRange(req.query, 60);

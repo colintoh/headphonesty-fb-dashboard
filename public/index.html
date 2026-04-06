@@ -138,7 +138,7 @@
     .msg-preview{max-width:130px}
     .sc .sc-value{font-size:18px}
     .cal-cell{min-height:22px;font-size:9px}
-    #fbCalPopup,#wpCalPopup{left:0!important;right:0!important;bottom:0!important;top:auto!important;max-width:100%!important;max-height:60vh!important;border-radius:14px 14px 0 0!important;width:100%!important}
+    #fbCalPopup,#wpCalPopup,#impactPopup{left:0!important;right:0!important;bottom:0!important;top:auto!important;max-width:100%!important;max-height:60vh!important;border-radius:14px 14px 0 0!important;width:100%!important}
   }
 </style>
 </head>
@@ -244,6 +244,16 @@
   <div id="wpCalPopupList"></div>
 </div>
 
+<!-- Content Impact format detail popup -->
+<div id="impactPopupOverlay" onclick="document.getElementById('impactPopup').style.display='none';this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199"></div>
+<div id="impactPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:560px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div id="impactPopupTitle" style="font-size:13px;font-weight:700"></div>
+    <button onclick="document.getElementById('impactPopup').style.display='none';document.getElementById('impactPopupOverlay').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px">✕</button>
+  </div>
+  <div id="impactPopupStats" style="margin-bottom:8px;font-size:10px;color:var(--dim)"></div>
+  <div id="impactPopupPosts"></div>
+</div>
 <div id="fbCalPopupOverlay" onclick="document.getElementById('fbCalPopup').style.display='none';this.style.display='none'" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199"></div>
 <div id="fbCalPopup" style="display:none;position:fixed;z-index:200;background:#1a1a2e;border:1px solid #2e2e4e;border-radius:10px;padding:14px;max-width:500px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -268,7 +278,7 @@
     <h3>🎯 Engagement Posts <span id="engLabel" style="font-size:10px;color:var(--dim)"></span></h3>
     <div id="engSummary" style="margin-bottom:6px"></div>
     <div id="engBars" style="margin-bottom:8px"></div>
-    <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th></tr></thead><tbody id="engBody"></tbody></table></div>
+    <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th><th></th></tr></thead><tbody id="engBody"></tbody></table></div>
   </div>
 </div>
 <div class="grid grid-2">
@@ -696,12 +706,49 @@ function showFBCalPopup(event,day){
   }
 }
 
-// Close popup when clicking outside
+async function showImpactPopup(event,type,purpose){
+  event.stopPropagation();
+  const popup=document.getElementById('impactPopup');
+  const data=await fetchJSON(`/api/posts-by-type?type=${type}&purpose=${purpose||'engagement'}&weeksAgo=${weeksAgo}`);
+  if(!data||!data.posts||!data.posts.length)return;
+  const posts=data.posts;
+  const totalReach=posts.reduce((s,p)=>s+(p.reach||0),0);
+  const totalShares=posts.reduce((s,p)=>s+(p.shares||0),0);
+  const totalComments=posts.reduce((s,p)=>s+(p.comments||0),0);
+  const typeColor=typeColors[type]||'#6b7280';
+  document.getElementById('impactPopupTitle').innerHTML=`<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:${typeColor}"></span>${type}</span> \u00b7 ${posts.length} posts`;
+  document.getElementById('impactPopupStats').innerHTML=`Total reach: <b>${fmt(totalReach)}</b> \u00b7 Shares: <b>${totalShares}</b> \u00b7 Comments: <b>${totalComments}</b>`;
+  let tableHtml=`<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="border-bottom:1px solid #2e2e4e"><th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">DATE</th><th style="text-align:right;padding:3px 4px;color:var(--dim);font-size:9px">REACH</th><th style="text-align:right;padding:3px 4px;color:var(--dim);font-size:9px">SHR</th><th style="text-align:right;padding:3px 4px;color:var(--dim);font-size:9px">CMT</th><th style="text-align:left;padding:3px 4px;color:var(--dim);font-size:9px">POST</th></tr></thead><tbody>`;
+  posts.forEach(p=>{
+    const fbLink=p.id?`https://www.facebook.com/${p.id.replace('_','/posts/')}`:'#';
+    const preview=(p.msg||'\u2014').slice(0,55)+(p.msg&&p.msg.length>55?'\u2026':'');
+    const dayShort=p.day?p.day.slice(5):'';
+    tableHtml+=`<tr style="border-bottom:1px solid #1e1e2e"><td style="padding:3px 4px;white-space:nowrap;color:var(--dim);font-size:10px">${dayShort} ${p.time_sgt}</td><td style="padding:3px 4px;text-align:right;font-weight:600">${fmt(p.reach)}</td><td style="padding:3px 4px;text-align:right">${p.shares||0}</td><td style="padding:3px 4px;text-align:right">${p.comments||0}</td><td style="padding:3px 4px"><a href="${fbLink}" target="_blank" style="color:var(--accent);text-decoration:none">${preview}</a></td></tr>`;
+  });
+  tableHtml+='</tbody></table>';
+  document.getElementById('impactPopupPosts').innerHTML=tableHtml;
+  popup.style.display='block';
+  document.getElementById('impactPopupOverlay').style.display='block';
+  const isMobile=window.innerWidth<=900;
+  if(!isMobile){
+    const x=Math.min(event.clientX,window.innerWidth-580);
+    const y=Math.min(event.clientY+10,window.innerHeight-400);
+    popup.style.left=x+'px';
+    popup.style.top=y+'px';
+  }
+}
+
+// Close popups when clicking outside
 document.addEventListener('click',e=>{
   const popup=document.getElementById('fbCalPopup');
   if(popup&&popup.style.display==='block'&&!popup.contains(e.target)&&!e.target.classList.contains('cal-cell')){
     popup.style.display='none';
     document.getElementById('fbCalPopupOverlay').style.display='none';
+  }
+  const ip=document.getElementById('impactPopup');
+  if(ip&&ip.style.display==='block'&&!ip.contains(e.target)){
+    ip.style.display='none';
+    document.getElementById('impactPopupOverlay').style.display='none';
   }
 });
 
@@ -841,7 +888,9 @@ async function loadFacebook(){
       document.getElementById(barsId).innerHTML=barsHtml;
       document.getElementById(bodyId).innerHTML=fmts.map(f=>{
         const c=typeColors[f.format]||'#6b7280';
-        return `<tr><td><span class="dot" style="background:${c}"></span> ${f.format}</td><td>${f.count} <span style="color:var(--dim)">(${f.countPct}%)</span></td><td>${fmt(f.totalReach)}</td><td style="font-weight:600">${fmt(f.medianReach)}</td><td>${f.engRate}%</td></tr>`;
+        const clickable=bodyId==='engBody'?`style="cursor:pointer" onclick="showImpactPopup(event,'${f.format}','engagement')"`:'';
+        const icon=bodyId==='engBody'?`<td style="text-align:center;font-size:11px" title="View ${f.format} posts">🔍</td>`:'';
+        return `<tr ${clickable}><td><span class="dot" style="background:${c}"></span> ${f.format}</td><td>${f.count} <span style="color:var(--dim)">(${f.countPct}%)</span></td><td>${fmt(f.totalReach)}</td><td style="font-weight:600">${fmt(f.medianReach)}</td><td>${f.engRate}%</td>${icon}</tr>`;
       }).join('');
     }
     const p=impact.promotional;
