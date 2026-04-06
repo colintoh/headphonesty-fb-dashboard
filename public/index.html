@@ -95,21 +95,6 @@
   .target-bar-marker{position:absolute;top:0;height:100%;width:2px;background:white;opacity:0.5}
   .target-pct{width:30px;font-size:10px;font-weight:600;text-align:right}
 
-  /* Slot tracker */
-  .slot-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-  .slot-day{text-align:center}
-  .slot-day .day-label{font-size:8px;color:var(--dim);margin-bottom:2px}
-  .slot-day .day-count{font-size:16px;font-weight:700}
-  .slot-day .day-bar{height:3px;background:#1a1a2a;border-radius:2px;margin-top:3px;overflow:hidden}
-  .slot-day .day-fill{height:100%;border-radius:2px}
-
-  /* Heatmap */
-  .heatmap-row{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-bottom:2px}
-  .heatmap-cell{border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;padding:5px 1px;min-height:26px;cursor:default;position:relative}
-  .heatmap-cell:hover::after{content:attr(data-tip);position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#222;color:white;padding:3px 6px;border-radius:4px;font-size:9px;white-space:nowrap;z-index:10}
-  .heatmap-row-labels{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-bottom:6px}
-  .heatmap-row-labels span{text-align:center;font-size:8px;color:var(--dim)}
-
   /* Alerts */
   .alert{padding:8px 12px;border-radius:6px;font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
   .alert-warn{background:#422006;border:1px solid #78350f;color:#fcd34d}
@@ -279,17 +264,6 @@
     <div id="engSummary" style="margin-bottom:6px"></div>
     <div id="engBars" style="margin-bottom:8px"></div>
     <div style="overflow-x:auto"><table class="data-table" style="font-size:10px"><thead><tr><th>Format</th><th>Posts</th><th>Reach</th><th>Med.</th><th>Eng%</th><th></th></tr></thead><tbody id="engBody"></tbody></table></div>
-  </div>
-</div>
-<div class="grid grid-2">
-  <div class="card">
-    <h3>Posting Slots (3 Weeks)</h3>
-    <div id="slotGrid"></div>
-    <div style="margin-top:6px;font-size:9px;color:var(--dim)">Target: 16 posts/day · <span style="color:var(--green)">●</span> ≥16 <span style="color:var(--orange)">●</span> ≥11 <span style="color:var(--red)">●</span> &lt;11</div>
-  </div>
-  <div class="card">
-    <h3>🔥 Posting Heatmap (SGT)</h3>
-    <div id="heatmapContainer"></div>
   </div>
 </div>
 <div class="grid">
@@ -808,17 +782,11 @@ async function loadTraffic(){
 // ===== FACEBOOK =====
 async function loadFacebook(){
   const wp=weekParams();
-  // Slots need 3 weeks of data (selected week + 2 prior)
-  const selWeek=getSelectedWeek();
-  const slot2ago=new Date(new Date(selWeek.start+'T12:00:00Z').getTime()-14*86400000);
-  const slotsStart=slot2ago.toISOString().slice(0,10);
-  const [daily,hourly,topPosts,impact,fbDaily,fbSlots3w]=await Promise.all([
+  const [daily,topPosts,impact,fbDaily]=await Promise.all([
     fetchJSON('/api/daily?days=30'),
-    fetchJSON('/api/hourly?days=30'),
     fetchJSON(`/api/top-posts?${wp}`),
     fetchJSON(`/api/content-impact?weeksAgo=${weeksAgo}`),
     fetchJSON(`/api/fb-daily-posts?${wp}`),
-    fetchJSON(`/api/fb-daily-posts?start=${slotsStart}&end=${selWeek.end}`),
   ]);
 
   // Reach
@@ -943,58 +911,6 @@ async function loadFacebook(){
     // Engagement panel
     renderImpactPanel(impact.engagement,'engBars','engBody','engSummary','engLabel');
   }
-
-  // Slots — 3 weeks (selected + 2 prior), grouped by week rows
-  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const slotsData=fbSlots3w||[];
-  // Group into weeks (Mon-Sun)
-  const slotWeeks=[];
-  const sw=getSelectedWeek();
-  for(let wk=2;wk>=0;wk--){
-    const wkStart=new Date(new Date(sw.start+'T12:00:00Z').getTime()-wk*7*86400000);
-    const wkEnd=new Date(wkStart.getTime()+6*86400000);
-    const startStr=wkStart.toISOString().slice(0,10);
-    const endStr=wkEnd.toISOString().slice(0,10);
-    const todayStr=fmtDateSGT(nowSGT());
-    const days=[];
-    for(let i=0;i<7;i++){
-      const dt=new Date(wkStart.getTime()+i*86400000);
-      const dStr=dt.toISOString().slice(0,10);
-      const match=slotsData.find(d=>d.day===dStr);
-      const isFuture=dStr>todayStr;
-      days.push({day:dStr,posts:match?match.posts:0,future:isFuture});
-    }
-    const isCurrentWk=wk===0;
-    const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const label=isCurrentWk?'This week':`${mo[wkStart.getUTCMonth()]} ${wkStart.getUTCDate()}`;
-    slotWeeks.push({days,label,isCurrent:isCurrentWk});
-  }
-  let slotHtml='<div style="display:grid;grid-template-columns:50px repeat(7,1fr);gap:4px;align-items:center">';
-  // Header row
-  slotHtml+='<div></div>';
-  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d=>{slotHtml+=`<div style="text-align:center;font-size:8px;color:var(--dim);font-weight:600">${d}</div>`});
-  slotWeeks.forEach(wk=>{
-    slotHtml+=`<div style="font-size:9px;color:${wk.isCurrent?'var(--accent)':'var(--dim)'};font-weight:${wk.isCurrent?'600':'400'};white-space:nowrap">${wk.label}</div>`;
-    wk.days.forEach(d=>{
-      if(d.future){
-        slotHtml+=`<div style="text-align:center;font-size:12px;color:#2a2a2a">—</div>`;
-      }else{
-        const color=d.posts>=FB_DAILY_TARGET?'var(--green)':d.posts>=FB_DAILY_TARGET*0.7?'var(--orange)':'var(--red)';
-        slotHtml+=`<div style="text-align:center;font-size:14px;font-weight:700;color:${color}">${d.posts}</div>`;
-      }
-    });
-  });
-  slotHtml+='</div>';
-  document.getElementById('slotGrid').innerHTML=slotHtml;
-
-  // Heatmap
-  const maxReach=Math.max(...hourly.map(h=>h.avg_reach));
-  const rows=[{label:'🌅 0-7',hours:hourly.filter(h=>h.hour_sgt>=0&&h.hour_sgt<8)},{label:'☀️ 8-15',hours:hourly.filter(h=>h.hour_sgt>=8&&h.hour_sgt<16)},{label:'🌙 16-23',hours:hourly.filter(h=>h.hour_sgt>=16&&h.hour_sgt<24)}];
-  document.getElementById('heatmapContainer').innerHTML=rows.map(row=>{
-    const cells=row.hours.map(h=>{const i=h.avg_reach/maxReach;const r=Math.round(99+(34-99)*i),g=Math.round(102+(197-102)*i),b=Math.round(241+(94-241)*i);return `<div class="heatmap-cell" style="background:rgba(${r},${g},${b},${0.3+i*0.7})" data-tip="${h.hour_sgt}:00 · ${fmt(h.avg_reach)}">${fmt(h.avg_reach)}</div>`}).join('');
-    const labels=row.hours.map(h=>`<span>${h.hour_sgt}</span>`).join('');
-    return `<div style="margin-bottom:3px"><div style="font-size:8px;color:#6b6b80">${row.label}</div><div class="heatmap-row">${cells}</div><div class="heatmap-row-labels">${labels}</div></div>`;
-  }).join('');
 
   // Top posts
   document.getElementById('topPostsBody').innerHTML=topPosts.map(p=>{

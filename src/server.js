@@ -370,15 +370,6 @@ app.get('/api/formats', (req, res) => {
   } finally { db.close(); }
 });
 
-app.get('/api/hourly', (req, res) => {
-  const { start, end } = getDateRange(req.query, 30);
-  const db = getDb();
-  if (!db) return res.status(500).json({ error: 'DB not available' });
-  try {
-    res.json(db.prepare(`SELECT (CAST(substr(created_at,12,2) AS INTEGER)+8)%24 as hour_sgt, COUNT(*) as posts, ROUND(AVG(reach)) as avg_reach FROM posts WHERE ${SGT_DAY_EXPR} >= ? AND ${SGT_DAY_EXPR} <= ? GROUP BY hour_sgt ORDER BY hour_sgt`).all(start, end));
-  } finally { db.close(); }
-});
-
 app.get('/api/top-posts', (req, res) => {
   const { start, end } = getDateRange(req.query, 7);
   const db = getDb();
